@@ -115,3 +115,27 @@ def test_fpt_15m_reads_break_not_absorption():
     bars, sigs = signals.analyse(rec["bars"], "HOSE", 15)
     got = {(s["t"], s["kind"]) for s in sigs}
     assert ("13:00", "stack_s") in got and not any(k == "absorb_b" and t == "13:00" for t, k in got)
+
+
+@pytest.mark.skipif(not FPT.exists(), reason="chưa seed kho")
+def test_fpt_vwap_same_across_timeframes():
+    # VWAP khớp liên tục FPT 25/09 = 65,046 (order-flow-lab tính từ tick, trùng kho zone); nến 09:15 = 65,357 (tính tay)
+    rec = json.loads(FPT.read_text(encoding="utf-8"))
+    last = {}
+    for tf in (5, 15, 30):
+        bars, _ = signals.analyse(rec["bars"], "HOSE", tf)
+        assert bars[0]["t"] == "ATO" and bars[0]["vw"] is None
+        assert bars[-1]["t"] == "ATC" and bars[-1]["vw"] == bars[-2]["vw"]
+        last[tf] = bars[-1]["vw"]
+        if tf == 5:
+            assert bars[1]["vw"] == pytest.approx(65.357, abs=1e-3)
+    assert last[5] == last[15] == last[30] == pytest.approx(65.046, abs=1e-3)
+
+
+@pytest.mark.skipif(not FPT.exists(), reason="chưa seed kho")
+def test_big_order_value_and_daily_vwap():
+    rec = json.loads(FPT.read_text(encoding="utf-8"))
+    bb = sum(b["bb"] for b in rec["bars"]); bbv = sum(b["bbv"] for b in rec["bars"])
+    assert bbv / bb == pytest.approx(65.13, abs=0.01)   # giá vốn lệnh lớn mua CĐ, khớp order-flow-lab
+    d = daily.days([rec], {})[-1]
+    assert d["vw"] == pytest.approx(65.046, abs=1e-3) and d["vwv"] == 1_001_700 + 2_336_200

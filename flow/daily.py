@@ -52,8 +52,15 @@ def days(recs: list[dict], closes: dict[str, float], n_out: int = 40) -> list[di
         rel = round((share - sum(prev) / len(prev)) * 100, 1) if share is not None and prev else None
         shares.append(share)
         lv = sorted(([round(p * f, 2), *r] for p, r in sm["levels"].items()), reverse=True)
+        # VWAP phiên = khớp liên tục (mua + bán CĐ); mã không có bên CĐ thì đành gồm cả ATO/ATC.
+        # vwv = KL dùng để tính → giao diện cộng dồn nhiều phiên thành AVWAP.
+        w = [(p, s + bu if buy + sell else s + bu + x) for p, s, bu, x in lv]
+        vwv = sum(n for _, n in w)
+        vw = sum(p * n for p, n in w) / vwv if vwv else None
         out.append({"d": rec["date"], "close": round(rec["close"] * f, 2), "raw": rec["close"], "f": round(f, 4),
                     "buy": buy, "sell": sell, "x": sm["x"], "delta": buy - sell, "cvd": cvd,
                     "share": None if share is None else round(share * 100, 1), "rel": rel,
-                    "big": sm["bb"] - sm["bs"], "gap": rec.get("gap", 0), "intraday": "bars" in rec, "lv": lv})
+                    "big": sm["bb"] - sm["bs"], "gap": rec.get("gap", 0), "intraday": "bars" in rec,
+                    "vw": None if vw is None else round(vw, 3), "vwv": vwv,
+                    "cvw": round((rec["close"] * f / vw - 1) * 100, 2) if vw else None, "lv": lv})
     return out[-n_out:]

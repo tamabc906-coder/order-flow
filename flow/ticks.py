@@ -55,7 +55,9 @@ def _minute(t: str) -> int:
 
 def session_bars(ticks: list[dict]) -> list[dict]:
     """Tick (cũ → mới) → nến thô để lưu kho: ATO, các nến 5', ATC. Mỗi nến
-    {t, auction, o, h, l, c, buy, sell, x, bb, bs, lv: [[giá, bán, mua, x], ...] giá giảm dần}."""
+    {t, auction, o, h, l, c, buy, sell, x, bb, bs, bbv, bsv, lv: [[giá, bán, mua, x], ...] giá giảm dần}.
+    bbv/bsv = Σ giá × KL của lệnh lớn mua/bán chủ động (giá thô) → giá vốn bình quân cá mập = bbv / bb.
+    Bản ghi trước 26/09/2026 không có hai trường này."""
     bars: dict[str, dict] = {}
     for o in orders(ticks):
         side = o["side"]
@@ -68,15 +70,19 @@ def session_bars(ticks: list[dict]) -> list[dict]:
         p = o["price"]
         if b is None:
             b = bars[key] = {"t": label, "auction": side in ("ATO", "ATC"), "o": p, "h": p, "l": p, "c": p,
-                             "buy": 0, "sell": 0, "x": 0, "bb": 0, "bs": 0, "lv": {}}
+                             "buy": 0, "sell": 0, "x": 0, "bb": 0, "bs": 0, "bbv": 0.0, "bsv": 0.0, "lv": {}}
         b["h"], b["l"], b["c"] = max(b["h"], p), min(b["l"], p), p
         row = b["lv"].setdefault(pkey(p), [0, 0, 0])  # bán, mua, x
         idx = SIDE_INDEX.get(side, OTHER)
         big = idx != OTHER and p * o["vol"] >= BIG_VALUE
         if idx == BUY:
-            b["buy"] += o["vol"]; row[1] += o["vol"]; b["bb"] += o["vol"] if big else 0
+            b["buy"] += o["vol"]; row[1] += o["vol"]
+            if big:
+                b["bb"] += o["vol"]; b["bbv"] += p * o["vol"]
         elif idx == SELL:
-            b["sell"] += o["vol"]; row[0] += o["vol"]; b["bs"] += o["vol"] if big else 0
+            b["sell"] += o["vol"]; row[0] += o["vol"]
+            if big:
+                b["bs"] += o["vol"]; b["bsv"] += p * o["vol"]
         else:
             b["x"] += o["vol"]; row[2] += o["vol"]
     keys = (["ATO"] if "ATO" in bars else []) + sorted(k for k in bars if k not in ("ATO", "ATC")) \
@@ -85,6 +91,7 @@ def session_bars(ticks: list[dict]) -> list[dict]:
     for k in keys:
         b = bars[k]
         b["lv"] = [[p, *r] for p, r in sorted(b["lv"].items(), reverse=True)]
+        b["bbv"], b["bsv"] = round(b["bbv"], 2), round(b["bsv"], 2)
         out.append(b)
     return out
 
@@ -110,6 +117,9 @@ def resample(bars: list[dict], tf: int) -> list[dict]:
         cur["h"], cur["l"], cur["c"] = max(cur["h"], b["h"]), min(cur["l"], b["l"]), b["c"]
         for k in ("buy", "sell", "x", "bb", "bs"):
             cur[k] += b[k]
+        for k in ("bbv", "bsv"):  # bản ghi cũ không có → không thêm khoá
+            if k in b:
+                cur[k] = round(cur.get(k, 0.0) + b[k], 2)
         for p, s, bu, x in b["lv"]:
             row = cur["lv"].setdefault(p, [0, 0, 0])
             row[0] += s; row[1] += bu; row[2] += x

@@ -106,6 +106,14 @@ def seed(items: list[dict]) -> None:
 def intraday_doc(sym: str, ex: str, rec: dict, prev: dict | None, closes: dict) -> dict:
     tfs = {str(tf): dict(zip(("bars", "sigs"), signals.analyse(rec["bars"], ex, tf))) for tf in TFS}
     tot = {k: sum(b[k] for b in rec["bars"]) for k in ("buy", "sell", "x", "bb", "bs")}
+    # VWAP khớp liên tục (= nến liên tục cuối), cả phiên gồm ATO/ATC, giá vốn lệnh lớn mua/bán CĐ (giá thô)
+    allv = [(p, s + bu + x) for b in rec["bars"] for p, s, bu, x in b["lv"]]
+    n_all = sum(n for _, n in allv)
+    big = {k: (sum(b.get(k + "v", 0) for b in rec["bars"]), tot[k]) for k in ("bb", "bs")}
+    has_big = all(k + "v" in b for b in rec["bars"] for k in ("bb", "bs"))  # bản ghi trước 26/09 không có
+    tot["vw"] = {"cont": tfs["5"]["bars"][-1]["vw"],
+                 "all": round(sum(p * n for p, n in allv) / n_all, 3) if n_all else None,
+                 **{k: round(v / n, 3) if has_big and n else None for k, (v, n) in big.items()}}
     ref = cf = None
     if prev:
         # giá tham chiếu = đóng cửa phiên trước, quy về thang giá thô của phiên này (có thể có GDKHQ xen giữa)

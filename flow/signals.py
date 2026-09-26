@@ -34,13 +34,25 @@ def vp(p: float) -> str:
 
 
 def enrich(raw: list[dict], exchange: str) -> list[dict]:
-    """Thêm d, cvd, poc, imb, vol, sig vào bản sao các nến."""
+    """Thêm d, cvd, vw, sd, poc, imb, vol, sig vào bản sao các nến.
+
+    vw/sd = VWAP và độ lệch chuẩn có trọng số KL, luỹ kế từ đầu phiên tới hết nến, CHỈ khớp liên tục (ATO/ATC kéo
+    lệch: ngày ETF cơ cấu ATC chiếm hơn nửa KL). Tính từ từng mức giá nên đúng như nhau ở mọi khung. ATO: None;
+    ATC giữ số của nến liên tục cuối. Chỉ là bản đồ mặt bằng giá, không phải tín hiệu."""
     bars = copy.deepcopy(raw)
     cvd = 0
+    pv = v = p2v = 0.0
     for b in bars:
         b["d"] = b["buy"] - b["sell"]
         cvd += b["d"]
         b["cvd"] = cvd
+        if not b["auction"]:
+            for p, s, bu, x in b["lv"]:
+                n = s + bu + x  # x trong nến liên tục chỉ có ở mã nguồn không có bên (DGC)
+                pv += p * n; v += n; p2v += p * p * n
+        m = pv / v if v else None
+        b["vw"] = None if m is None else round(m, 3)
+        b["sd"] = None if m is None else round(max(0.0, p2v / v - m * m) ** 0.5, 3)
         step = tick_size(b["h"], exchange)
         lv = b["lv"]
         vol = sum(s + bu + x for _, s, bu, x in lv) or 1

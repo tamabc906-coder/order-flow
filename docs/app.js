@@ -12,6 +12,8 @@ const px = v => v.toLocaleString('vi-VN', {minimumFractionDigits: 1, maximumFrac
 const pct = v => v == null ? '–' : v.toLocaleString('vi-VN', {maximumFractionDigits: 1}) + ' %';
 const spt = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString('vi-VN', {minimumFractionDigits: 1, maximumFractionDigits: 1});
 const dd = s => s.slice(8, 10) + '/' + s.slice(5, 7);
+// a so với b, có dấu: vsp(64.7, 65.046) → '−0,53 %'
+const vsp = (a, b) => { const v = (a / b - 1) * 100; return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString('vi-VN', {maximumFractionDigits: 2}) + ' %'; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const NS = 'http://www.w3.org/2000/svg';
 function el(tag, attrs, parent, text) {
@@ -190,6 +192,11 @@ async function renderDay(wantDay) {
     ['ATO + ATC', (T.x / (D.total || 1) * 100).toFixed(0) + ' %', mil(T.x) + ', không tính delta', ''],
     ['Lệnh lớn ròng', smil(T.bb - T.bs), 'lệnh ≥ 500 tr đ', T.bb >= T.bs ? 'pos' : 'neg'],
   ];
+  const VW = T.vw || {}, lastBar = D.tf['5'].bars[D.tf['5'].bars.length - 1];
+  if (VW.cont) tiles.push(['VWAP phiên', px(VW.cont), `đóng cửa ${vsp(lastBar.c, VW.cont)} so VWAP` +
+    (VW.all ? ` · gồm ATO/ATC ${px(VW.all)}` : ''), 'vw']);
+  tiles.push(['Giá vốn cá mập', VW.bb || VW.bs ? `${VW.bb ? px(VW.bb) : '–'} / ${VW.bs ? px(VW.bs) : '–'}` : '–',
+    VW.bb || VW.bs ? 'VWAP lệnh lớn mua / bán CĐ' : 'chưa có cho phiên này', '']);
   $('d-tiles').innerHTML = tiles.map(([k, v, n, c]) =>
     `<div class="tile"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="n">${n}</div></div>`).join('');
   showTF();
@@ -228,7 +235,9 @@ function drawIntraday() {
   const yP0 = yTop, yD0 = yP0 + HP + GAP, yC0 = yD0 + HD + GAP, H = yC0 + HC + 22;
   const cw = (W - L - R) / B.length;
   const xc = i => L + cw * (i + .5);
-  let loP = Math.min(...B.map(b => b.l)), hiP = Math.max(...B.map(b => b.h));
+  const VB = B.map((b, i) => [i, b]).filter(([, b]) => !b.auction && b.vw != null);
+  let loP = Math.min(...B.map(b => b.l), ...VB.map(([, b]) => b.vw - 2 * b.sd)),
+    hiP = Math.max(...B.map(b => b.h), ...VB.map(([, b]) => b.vw + 2 * b.sd));
   const padP = (hiP - loP) * .12 || .5; loP -= padP; hiP += padP;
   const yP = p => yP0 + (hiP - p) / (hiP - loP) * HP;
   const maxD = Math.max(1, ...B.map(b => Math.abs(b.d)));
@@ -255,6 +264,16 @@ function drawIntraday() {
   el('text', {x: L - 4, y: yD0 + HD / 2 + 3, 'text-anchor': 'end'}, svg, '0');
   el('text', {x: L - 4, y: yC0 + 8, 'text-anchor': 'end'}, svg, 'CVD');
   el('line', {x1: L, x2: W - R, y1: yC(0), y2: yC(0), stroke: 'var(--line)'}, svg);
+  // VWAP khớp liên tục: dải ±1σ tô nhạt, ±2σ nét đứt, đường VWAP — vẽ dưới nến
+  if (VB.length > 1) {
+    const pts = f => VB.map(([i, b]) => xc(i).toFixed(1) + ' ' + yP(f(b)).toFixed(1));
+    el('path', {d: 'M' + pts(b => b.vw + b.sd).join('L') + 'L' + pts(b => b.vw - b.sd).reverse().join('L') + 'Z', fill: 'var(--vwap-band)'}, svg);
+    for (const k of [2, -2]) el('path', {d: 'M' + pts(b => b.vw + k * b.sd).join('L'), fill: 'none', stroke: 'var(--vwap)',
+      'stroke-width': 1, 'stroke-dasharray': '3 3', opacity: .6}, svg);
+    el('path', {d: 'M' + pts(b => b.vw).join('L'), fill: 'none', stroke: 'var(--vwap)', 'stroke-width': 1.8, 'stroke-linejoin': 'round'}, svg);
+    const [li, lb] = VB[VB.length - 1];
+    el('text', {x: xc(li) - 4, y: yP(lb.vw + 2 * lb.sd) - 4, 'text-anchor': 'end', style: 'fill:var(--vwap);font-weight:600'}, svg, 'VWAP ' + px(lb.vw));
+  }
   B.forEach((b, i) => {
     const col = b.auction ? 'var(--x)' : b.c >= b.o ? 'var(--buy)' : 'var(--sell)';
     el('line', {x1: xc(i), x2: xc(i), y1: yP(b.h), y2: yP(b.l), stroke: col}, svg);
@@ -281,7 +300,7 @@ function drawIntraday() {
   const selRect = el('rect', {y: yTop - 6, height: H - 22 - yTop + 6, width: cw, fill: 'var(--sel)', rx: 2}, gSel);
   B.forEach((b, i) => {
     const r = el('rect', {x: L + cw * i, y: 0, width: cw, height: H, fill: 'transparent', style: 'cursor:pointer'}, svg);
-    el('title', {}, r, `${b.t} · delta ${sgn(b.d)} · CVD ${sgn(b.cvd)}`);
+    el('title', {}, r, `${b.t} · delta ${sgn(b.d)} · CVD ${sgn(b.cvd)}` + (b.vw != null ? ` · VWAP ${px(b.vw)}` : ''));
     r.addEventListener('click', () => select(i));
   });
   chart = {selRect, L, cw};
@@ -302,7 +321,9 @@ function select(i) {
   if (chart) chart.selRect.setAttribute('x', chart.L + chart.cw * sel);
   $('fp-title').textContent = 'Nến ' + label(b);
   $('fp-ohlc').innerHTML = `M ${px(b.o)} · C ${px(b.h)} · T ${px(b.l)} · Đ ${px(b.c)} · KL ${fmt(b.vol)} · ` +
-    (b.auction ? 'khớp định kỳ, không có bên chủ động' : `delta <b class="${b.d >= 0 ? 'pos' : 'neg'}">${sgn(b.d)}</b>`);
+    (b.auction ? 'khớp định kỳ, không có bên chủ động' : `delta <b class="${b.d >= 0 ? 'pos' : 'neg'}">${sgn(b.d)}</b>`) +
+    (b.vw != null ? `<br><span class="vw">VWAP tới nến này ${px(b.vw)} ± ${px(b.sd)}</span> · giá đóng ${vsp(b.c, b.vw)}` : '');
+  const near = b.vw == null || !b.lv.length ? null : b.lv.reduce((m, r) => Math.abs(r[0] - b.vw) < Math.abs(m - b.vw) ? r[0] : m, b.lv[0][0]);
   const mx = Math.max(1, ...b.lv.map(r => Math.max(r[1], r[2], r[3])));
   const imb = new Set(b.imb.map(([p, s]) => p + '|' + s));
   let h = '<tr><th style="text-align:left">Giá</th><th style="text-align:right">Bán</th><th style="text-align:center">bán × mua</th><th style="text-align:left">Mua</th><th>Delta</th></tr>';
@@ -310,7 +331,7 @@ function select(i) {
     const poc = p === b.poc, iS = imb.has(p + '|s'), iB = imb.has(p + '|b');
     const pair = b.auction ? `<span>${fmt(x)}</span>` : `<span class="s">${fmt(s)}</span> × <span class="b">${fmt(bu)}</span>`;
     const d = bu - s;
-    h += `<tr class="${poc ? 'poc' : ''}"><td class="p">${px(p)}${poc ? '<span class="mark">●</span>' : ''}</td>` +
+    h += `<tr class="${poc ? 'poc' : ''}"><td class="p${p === near ? ' vwr' : ''}"${p === near ? ' title="Mức gần VWAP nhất"' : ''}>${px(p)}${poc ? '<span class="mark">●</span>' : ''}</td>` +
       `<td class="bar ${iS ? 'imbS' : ''}"><div class="bs" style="width:${(b.auction ? 0 : s / mx * 100).toFixed(1)}%"></div></td>` +
       `<td class="pair">${pair}</td>` +
       `<td class="bar ${iB ? 'imbB' : ''}"><div class="bb" style="width:${((b.auction ? x : bu) / mx * 100).toFixed(1)}%;${b.auction ? 'background:var(--x)' : ''}"></div></td>` +
@@ -346,6 +367,10 @@ async function renderDays() {
   const y10 = 10, yd0 = y10 + H1 + G + 12, yc0 = yd0 + HDl + G + 12, H2 = yc0 + HCv + 10;
   let lo = Infinity, hi = -Infinity, mx = 1;
   for (const d of Ds) for (const [p, s, b] of d.lv) { lo = Math.min(lo, p); hi = Math.max(hi, p); mx = Math.max(mx, s, b); }
+  // AVWAP neo từ phiên đầu khung đang xem: cộng dồn VWAP × KL từng phiên (d.vwv = KL dùng tính VWAP)
+  let apv = 0, av = 0;
+  const AV = Ds.map((d, k) => { if (d.vw != null && d.vwv) { apv += d.vw * d.vwv; av += d.vwv; } return [k, av ? apv / av : null]; }).filter(([, v]) => v != null);
+  for (const v of [...Ds.map(d => d.vw), ...AV.map(a => a[1])]) if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
   const pad = (hi - lo) * .06 || .5; lo -= pad; hi += pad;
   const y = p => y10 + (hi - p) / (hi - lo) * H1;
   const colW = (W2 - L2 - R2) / Ds.length, half = colW * .44;
@@ -369,7 +394,17 @@ async function renderDays() {
     el('line', {x1: cx - half, x2: cx + half, y1: y(d.close), y2: y(d.close), stroke: 'var(--ink)', 'stroke-width': 1.4}, s2);
     const t = el('text', {x: cx, y: y10 + H1 + 14, 'text-anchor': 'middle', style: `font-weight:600;fill:${d.intraday ? 'var(--gold2)' : 'var(--ink)'};cursor:${d.intraday ? 'pointer' : 'default'}`}, s2, dd(d.d));
     if (d.intraday) t.addEventListener('click', () => go('day', S.sym, d.d));
+    if (d.vw != null) {
+      const vl = el('line', {x1: cx - half, x2: cx - half * .15, y1: y(d.vw), y2: y(d.vw), stroke: 'var(--vwap)', 'stroke-width': 2.4}, s2);
+      el('title', {}, vl, `VWAP ${dd(d.d)}: ${px(d.vw)} · đóng cửa ${vsp(d.close, d.vw)}`);
+    }
   });
+  if (AV.length > 1) {
+    el('path', {d: AV.map(([k, v], j) => (j ? 'L' : 'M') + (L2 + colW * (k + .5)).toFixed(1) + ' ' + y(v).toFixed(1)).join(''),
+      fill: 'none', stroke: 'var(--vwap)', 'stroke-width': 1.6, 'stroke-dasharray': '5 3'}, s2);
+    const [lk, lv] = AV[AV.length - 1];
+    el('text', {x: L2 + colW * (lk + .5), y: y(lv) - 5, 'text-anchor': 'end', style: 'fill:var(--vwap);font-weight:600'}, s2, `AVWAP ${Ds.length} phiên ${px(lv)}`);
+  }
   const md = Math.max(1, ...Ds.map(d => Math.abs(d.delta)));
   const ydl = v => yd0 + HDl / 2 - v / md * HDl / 2;
   el('text', {x: L2 - 4, y: yd0 + 4, 'text-anchor': 'end'}, s2, 'Delta');
@@ -388,9 +423,10 @@ async function renderDays() {
   el('text', {x: L2 - 4, y: yc0 + 8, 'text-anchor': 'end'}, s2, 'CVD');
   el('text', {x: W2 - R2, y: yc0 - 4, 'text-anchor': 'end'}, s2, W2 < 500 ? '— CVD   - - giá' : '— CVD (vàng)   - - giá đóng cửa (mỗi đường một thang riêng)');
 
-  let t = '<tr><th>Phiên</th><th>Đóng cửa</th><th>Mua CĐ</th><th>Bán CĐ</th><th>Delta</th><th title="Mua CĐ / (mua CĐ + bán CĐ)">Mua CĐ %</th><th title="So với trung bình tối đa 20 phiên trước của chính mã này">so TB</th><th>CVD</th><th>ATO/ATC</th><th>Lệnh lớn ròng</th></tr>';
+  let t = '<tr><th>Phiên</th><th>Đóng cửa</th><th class="vw">VWAP</th><th title="Đóng cửa so với VWAP khớp liên tục của phiên">Đóng/VWAP</th><th>Mua CĐ</th><th>Bán CĐ</th><th>Delta</th><th title="Mua CĐ / (mua CĐ + bán CĐ)">Mua CĐ %</th><th title="So với trung bình tối đa 20 phiên trước của chính mã này">so TB</th><th>CVD</th><th>ATO/ATC</th><th>Lệnh lớn ròng</th></tr>';
   for (const d of [...data.days].reverse()) t += `<tr><td>${d.intraday ? `<a href="#day/${S.sym}/${d.d}" class="gold">${dd(d.d)}</a>` : dd(d.d)}${d.f !== 1 ? `<span class="tag" title="Giá thô ${px(d.raw)} × ${d.f}">điều chỉnh</span>` : ''}${d.gap ? `<span class="tag">hụt ${fmt(d.gap)}</span>` : ''}</td>` +
-    `<td>${px(d.close)}</td><td>${mil(d.buy)}</td><td>${mil(d.sell)}</td><td class="${d.delta >= 0 ? 'pos' : 'neg'}">${smil(d.delta)}</td>` +
+    `<td>${px(d.close)}</td><td class="vw">${d.vw == null ? '–' : px(d.vw)}</td>` +
+    `<td class="${d.cvw == null ? '' : d.cvw >= 0 ? 'pos' : 'neg'}">${d.cvw == null ? '–' : vsp(d.close, d.vw)}</td><td>${mil(d.buy)}</td><td>${mil(d.sell)}</td><td class="${d.delta >= 0 ? 'pos' : 'neg'}">${smil(d.delta)}</td>` +
     `<td>${pct(d.share)}</td><td class="${d.rel == null ? '' : d.rel >= 0 ? 'pos' : 'neg'}">${spt(d.rel)}</td>` +
     `<td class="${d.cvd >= 0 ? 'pos' : 'neg'}">${smil(d.cvd)}</td><td>${(d.x / ((d.buy + d.sell + d.x) || 1) * 100).toFixed(0)} %</td>` +
     `<td class="${d.big >= 0 ? 'pos' : 'neg'}">${smil(d.big)}</td></tr>`;

@@ -7,6 +7,7 @@
   --line:rgba(212,175,106,.22); --line2:rgba(212,175,106,.45); --grid:rgba(169,180,200,.10);
   --buy:#3DBE7A; --sell:#E5575C; --buy-soft:rgba(61,190,122,.24); --sell-soft:rgba(229,87,92,.26);
   --x:#7C879A; --warn:#E0A84A; --sel:rgba(212,175,106,.14);
+  --vwap:#B99BFF; --vwap-band:rgba(185,155,255,.13);
   --nav-h:64px;
 }
 *{box-sizing:border-box}
@@ -41,6 +42,7 @@ h2.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(
 .empty{color:var(--mute);font-size:13px;padding:8px 0}
 
 .tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px}
+.tiles.t7{grid-template-columns:repeat(7,1fr)}
 .tile{background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-width:0}
 .tile:nth-child(even){background:linear-gradient(160deg,var(--bronze1),var(--bronze2))}
 .tile .k{font-size:11.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -48,7 +50,8 @@ h2.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(
 .tile .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
 .tile .n{font-size:11px;color:var(--mute)}
 .tile:nth-child(even) .n{color:#D9C7A4}
-.pos{color:var(--buy)} .neg{color:var(--sell)} .gold{color:var(--gold2)}
+.pos{color:var(--buy)} .neg{color:var(--sell)} .gold{color:var(--gold2)} .vw{color:var(--vwap)}
+table.fp td.p.vwr{box-shadow:inset 3px 0 0 var(--vwap)}
 
 /* ---------- controls ---------- */
 .ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 12px}
@@ -142,9 +145,10 @@ section.tab.on{display:block}
   .grid2>div:not(.card){display:contents}
   #chartcard{order:1} #fpcard{order:2} #sigcard{order:3}
   .tiles{grid-template-columns:repeat(3,1fr)}
+  .tiles.t7{grid-template-columns:repeat(4,1fr)}
 }
 @media (max-width:420px){
-  .tiles{grid-template-columns:repeat(2,1fr)}
+  .tiles,.tiles.t7{grid-template-columns:repeat(2,1fr)}
   .tile .v{font-size:17px}
   table.fp{font-size:12px}
   table.fp td.bar{width:24%}

@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=2">
+<link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
 <header class="top">
@@ -32,13 +32,13 @@
   <section class="tab" id="t-day">
     <div class="ctrl"><select id="d-sym" aria-label="Mã"></select><select id="d-date" aria-label="Phiên"></select>
       <span class="pill" id="d-pill"></span></div>
-    <div class="tiles" id="d-tiles"></div>
+    <div class="tiles t7" id="d-tiles"></div>
     <div class="grid2">
       <div>
         <div class="card" id="chartcard">
           <h3><span class="num">1</span>Nến <span id="d-tfname">15 phút</span> · delta · CVD</h3>
           <div class="chips tf" id="d-tf" role="group" aria-label="Khung nến"></div>
-          <p class="hint">Chạm vào một nến để xem footprint. Delta = mua chủ động − bán chủ động. CVD = delta cộng dồn từ đầu phiên.</p>
+          <p class="hint">Chạm vào một nến để xem footprint. Delta = mua chủ động − bán chủ động. CVD = delta cộng dồn từ đầu phiên. Đường tím là VWAP: giá khớp bình quân theo KL từ đầu phiên, không tính ATO/ATC.</p>
           <div id="d-chart"></div>
           <div class="legend">
             <span><span class="sw" style="background:var(--buy)"></span>mua chủ động / nến tăng</span>
@@ -47,6 +47,7 @@
             <span><i style="color:var(--gold2)">—</i> CVD</span>
             <span><i>◆</i> hấp thụ</span><span><i>✕</i> hấp thụ thất bại</span><span><i>≡</i> xếp chồng</span>
             <span><i>⚠</i> phân kỳ</span><span><i>▽△</i> cạn kiệt</span>
+            <span><span class="sw" style="background:var(--vwap)"></span>VWAP, dải ±1σ tô nhạt, ±2σ nét đứt</span>
           </div>
         </div>
         <div class="card bronze" id="sigcard">
@@ -65,6 +66,7 @@
           <span>● POC (mức khớp nhiều nhất)</span>
           <span><span class="sw" style="background:var(--buy-soft)"></span>imbalance mua ≥3×</span>
           <span><span class="sw" style="background:var(--sell-soft)"></span>imbalance bán ≥3×</span>
+          <span><span class="sw" style="background:var(--vwap)"></span>mức gần VWAP nhất</span>
         </div>
         <ul class="siglist" id="fp-sigs"></ul>
       </div>
@@ -77,7 +79,8 @@
     <div class="card">
       <h3><span class="num">1</span>Footprint từng phiên</h3>
       <p class="hint">Mỗi cột là một phiên: đỏ sang trái là bán chủ động, xanh sang phải là mua chủ động, theo từng mức giá
-        (đã quy về giá điều chỉnh). Vạch kem là giá đóng cửa, thanh xám là KL ATO/ATC.</p>
+        (đã quy về giá điều chỉnh). Vạch kem là giá đóng cửa, thanh xám là KL ATO/ATC. Vạch tím là VWAP khớp liên tục của phiên,
+        đường tím nét đứt là AVWAP: giá vốn bình quân của mọi người mua từ phiên đầu khung đang xem.</p>
       <div id="m-chart"></div>
     </div>
     <div class="card bronze">
@@ -99,6 +102,10 @@
         <dt>≡ Xếp chồng</dt><dd>Từ 2 ô imbalance cùng bên liền nhau. <span>Thường thành hỗ trợ/kháng cự. Sách đòi 3 ô, nhưng bước giá cổ phiếu VN thô nên nến 5' hiếm khi có đủ 3 mức.</span></dd>
         <dt>⚠ Phân kỳ</dt><dd>Giá tạo đáy/đỉnh mới trong phiên nhưng CVD không theo. <span>Bên đang thắng dùng ít lệnh chủ động hơn trước.</span></dd>
         <dt>▽△ Cạn kiệt</dt><dd>Nến chạm đáy/đỉnh mới nhưng ở mức giá cực trị gần như không khớp gì. <span>Không còn ai đuổi tiếp.</span></dd>
+        <dt class="vw">VWAP</dt><dd>Giá khớp bình quân theo KL từ đầu phiên (khớp liên tục, không tính ATO/ATC). <span>Thước đo của tổ chức: mua dưới VWAP là mua rẻ hơn mặt bằng phiên. Không phải hỗ trợ/kháng cự đã đo được.</span></dd>
+        <dt class="vw">Dải ±σ</dt><dd>Độ lệch chuẩn giá có trọng số KL quanh VWAP. <span>Giá ngoài ±2σ là đã đi xa mặt bằng phiên; ở VN không bán khống/không lướt T+0 nên không có lực kéo về như thị trường Mỹ.</span></dd>
+        <dt class="vw">AVWAP</dt><dd>Ở tab Nhiều phiên: VWAP cộng dồn từ phiên đầu của khung đang xem. <span>Giá trên AVWAP: phần lớn người mua trong khung đó đang lãi.</span></dd>
+        <dt class="vw">Giá vốn cá mập</dt><dd>VWAP riêng các lệnh ≥ 500 tr đ mua chủ động (và bán chủ động). <span>Lệnh lớn hôm nay mua/bán ở mặt bằng giá nào so với cả phiên. Có từ phiên 25/09/2026.</span></dd>
       </dl>
     </div>
     <div class="card bronze">
@@ -109,6 +116,8 @@
         <li>Bước giá thô (0,1 ≈ 0,15 % với mã 65 nghìn): nhiều nến 5' chỉ có 2 mức giá, bán nằm ở giá dưới, mua ở giá trên.</li>
         <li>Không bán khống trong phiên: bán chủ động chỉ đến từ người đang cầm hàng.</li>
         <li>ATO/ATC không có bên chủ động nên tô xám và không cộng vào delta/CVD. Ngày ETF cơ cấu ATC có thể chiếm hơn nửa KL.</li>
+        <li>VWAP chỉ tính khớp liên tục: ngày ETF cơ cấu 18/09/2026, FPT đóng cửa (giá ATC) thấp hơn VWAP 3,5 %.</li>
+        <li>T+2: cổ phiếu mua hôm nay chưa bán được trong phiên, nên cách chơi "giá lệch xa VWAP rồi quay về" kiểu day-trader Mỹ không áp dụng. VWAP ở đây là bản đồ mặt bằng giá, chưa đo được lợi thế. Phiên chạm trần/sàn thì VWAP và dải σ không còn ý nghĩa.</li>
         <li>Sổ lệnh công khai chỉ có 3 bước giá, không thấy lệnh chờ lớn. Hấp thụ chỉ suy ra được từ lệnh đã khớp.</li>
         <li>Nguồn VNDirect thỉnh thoảng bỏ sót tick lẻ; số cp hụt hiện ở ô đầu tab Trong phiên.</li>
         <li>Phiên 18–24/09/2026 chỉ có footprint cả ngày (nạp từ kho cũ), chưa có nến 5'.</li>
@@ -128,7 +137,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
