@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import copy
 
-from .ticks import pkey, tick_size
+from .ticks import BAR_MIN, pkey, resample, tick_size
 
 IMB_RATIO = 3.0          # so chéo 1 bước giá
 IMB_MIN_SHARE = 0.03     # bên áp đảo phải ≥ 3 % KL nến, tránh 300 cp vs 0 cũng thành imbalance
@@ -15,7 +15,9 @@ ABSORB_Q = 0.15          # delta nằm trong 15 % tệ nhất / tốt nhất phi
 ABSORB_SHARE = 0.30      # và |delta| ≥ 30 % KL khớp liên tục của nến
 LVL_SHARE = 0.40         # hấp thụ tại mức giá: một bên ở một mức chiếm ≥ 40 % KL nến
 LVL_MULT = 2.0           # và ≥ 2 × KL trung vị một nến trong phiên
-FAIL_N = 6               # hấp thụ thất bại nếu giá phá mức đó trong 6 nến (30') sau
+FAIL_MIN = 30            # hấp thụ thất bại nếu giá phá mức đó trong 30 phút sau
+WARM_MIN = 30            # phân kỳ/cạn kiệt chỉ xét sau 30 phút đầu phiên
+DIV_GAP_MIN = 15         # đáy/đỉnh cũ phải cách ≥ 15 phút mới so phân kỳ
 EXH_SHARE = 0.02         # cạn kiệt: mức giá cực trị khớp ≤ 2 % KL nến
 
 KINDS = ("absorb_b", "absorb_s", "fail_b", "fail_s", "div_b", "div_s", "exh_b", "exh_s", "stack_b", "stack_s")
@@ -64,8 +66,10 @@ def stacks(imb: list, side: str, step: float) -> bool:
     return any(round(b - a, 3) <= step + 1e-9 for a, b in zip(ps, ps[1:]))
 
 
-def mark(bars: list[dict], exchange: str) -> list[dict]:
-    """Đánh dấu hiệu lên nến (b["sig"]) và trả danh sách {i, kind, t, text} theo thứ tự thời gian."""
+def mark(bars: list[dict], exchange: str, tf: int = BAR_MIN) -> list[dict]:
+    """Đánh dấu hiệu lên nến (b["sig"]) và trả danh sách {i, kind, t, text} theo thứ tự thời gian.
+    Ngưỡng thời gian tính theo PHÚT rồi đổi ra số nến của khung tf (5' giữ đúng số cũ: 6 / 3 / 6)."""
+    warm, div_gap, fail_n = WARM_MIN // tf, max(1, DIV_GAP_MIN // tf), max(2, FAIL_MIN // tf)
     cont = [i for i, b in enumerate(bars) if not b["auction"] and b["buy"] + b["sell"] > 0]
     if len(cont) < 3:
         return []
@@ -131,15 +135,15 @@ def mark(bars: list[dict], exchange: str) -> list[dict]:
                         f"vùng này thường thành {'hỗ trợ' if side == 'b' else 'kháng cự'} cho các nến sau.")
                 run = [p] if p is not None else []
 
-        if run_lo and b["l"] < run_lo[0] and n >= 6 and i - run_lo[2] >= 3 and b["cvd"] > run_lo[1]:
+        if run_lo and b["l"] < run_lo[0] and n >= warm and i - run_lo[2] >= div_gap and b["cvd"] > run_lo[1]:
             add(i, "div_b", f"Giá thủng đáy phiên ({vp(run_lo[0])} → {vp(b['l'])}) nhưng CVD cao hơn lúc tạo đáy cũ "
                             f"({vn(run_lo[1])} → {vn(b['cvd'])}): lực bán chủ động yếu dần.")
-        if run_hi and b["h"] > run_hi[0] and n >= 6 and i - run_hi[2] >= 3 and b["cvd"] < run_hi[1]:
+        if run_hi and b["h"] > run_hi[0] and n >= warm and i - run_hi[2] >= div_gap and b["cvd"] < run_hi[1]:
             add(i, "div_s", f"Giá vượt đỉnh phiên ({vp(run_hi[0])} → {vp(b['h'])}) nhưng CVD thấp hơn lúc tạo đỉnh cũ "
                             f"({vn(run_hi[1])} → {vn(b['cvd'])}): đỉnh mới được đẩy bằng ít tiền mua chủ động.")
         new_lo = run_lo is None or b["l"] < run_lo[0]
         new_hi = run_hi is None or b["h"] > run_hi[0]
-        if n >= 6 and (new_lo or new_hi) and rng > 0:
+        if n >= warm and (new_lo or new_hi) and rng > 0:
             edge = b["lv"][-1] if new_lo else b["lv"][0]
             edge_vol = edge[1] + edge[2]
             if edge_vol <= EXH_SHARE * b["vol"]:
@@ -151,11 +155,11 @@ def mark(bars: list[dict], exchange: str) -> list[dict]:
         if new_hi:
             run_hi = (b["h"], b["cvd"], i)
 
-    # Hấp thụ thất bại: trong FAIL_N nến sau, giá phá qua mức đã hấp thụ ≥ 1 bước giá
+    # Hấp thụ thất bại: trong FAIL_MIN phút sau, giá phá qua mức đã hấp thụ ≥ 1 bước giá
     pos = {i: n for n, i in enumerate(cont)}
     for i, side, p in walls:
         step = tick_size(p, exchange)
-        for j in cont[pos[i] + 1: pos[i] + 1 + FAIL_N]:
+        for j in cont[pos[i] + 1: pos[i] + 1 + fail_n]:
             broke = bars[j]["l"] <= p - step + 1e-9 if side == "b" else bars[j]["h"] >= p + step - 1e-9
             if broke:
                 edge = bars[j]["l"] if side == "b" else bars[j]["h"]
@@ -168,6 +172,7 @@ def mark(bars: list[dict], exchange: str) -> list[dict]:
     return sigs
 
 
-def analyse(raw: list[dict], exchange: str) -> tuple[list[dict], list[dict]]:
-    bars = enrich(raw, exchange)
-    return bars, mark(bars, exchange)
+def analyse(raw: list[dict], exchange: str, tf: int = BAR_MIN) -> tuple[list[dict], list[dict]]:
+    """raw = nến 5' của kho; tf = khung muốn xem (5, 15, 30)."""
+    bars = enrich(resample(raw, tf), exchange)
+    return bars, mark(bars, exchange, tf)

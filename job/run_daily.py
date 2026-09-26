@@ -29,6 +29,8 @@ from job import watchlist
 
 logger = logging.getLogger("order-flow")
 
+TFS = (5, 15, 30)        # khung nến trong phiên; app mặc định 15'
+LIST_TF = "15"           # khung dùng cho số dấu hiệu + sparkline ở tab Danh mục
 KEEP_INTRADAY = 60      # số phiên giữ nến 5' trên Pages
 DAILY_OUT = 40          # số phiên của file nhiều phiên mỗi mã
 DNSE_DAYS = 120         # ngày lịch nến DNSE để lấy hệ số điều chỉnh (phủ ≥ 40 phiên)
@@ -102,7 +104,7 @@ def seed(items: list[dict]) -> None:
 
 # ---------------------------------------------------------------- dựng docs/data
 def intraday_doc(sym: str, ex: str, rec: dict, prev: dict | None, closes: dict) -> dict:
-    bars, sigs = signals.analyse(rec["bars"], ex)
+    tfs = {str(tf): dict(zip(("bars", "sigs"), signals.analyse(rec["bars"], ex, tf))) for tf in TFS}
     tot = {k: sum(b[k] for b in rec["bars"]) for k in ("buy", "sell", "x", "bb", "bs")}
     ref = cf = None
     if prev:
@@ -114,7 +116,7 @@ def intraday_doc(sym: str, ex: str, rec: dict, prev: dict | None, closes: dict) 
         cf = [round(int(ref * (1 - bd) / step + 0.9999) * step, 2), round(int(ref * (1 + bd) / step) * step, 2)]
     return {"sym": sym, "day": rec["date"], "ex": ex, "ticks": rec["ticks"], "total": rec["total"],
             "gap": rec.get("gap", 0), "no_side": rec.get("no_side", False), "tot": tot, "ref": ref, "cf": cf,
-            "bars": bars, "sigs": sigs}
+            "tf": tfs}
 
 
 def build(items: list[dict], wl_source: str, run: dict | None) -> int:
@@ -149,9 +151,10 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
                "buy": last["buy"], "sell": last["sell"], "delta": last["delta"], "share": last["share"],
                "rel": last["rel"], "big": last["big"], "gap": last["gap"], "sig": {}, "cvd": []}
         if last_doc and last_doc["day"] == last["d"]:
-            for s in last_doc["sigs"]:
+            view = last_doc["tf"][LIST_TF]
+            for s in view["sigs"]:
                 row["sig"][s["kind"]] = row["sig"].get(s["kind"], 0) + 1
-            row["cvd"] = [b["cvd"] for b in last_doc["bars"] if not b["auction"]]
+            row["cvd"] = [b["cvd"] for b in view["bars"] if not b["auction"]]
             row["no_side"] = last_doc["no_side"]
         rows.append(row)
 

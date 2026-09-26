@@ -56,6 +56,7 @@ h2.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(
 .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
 .chip{border:1px solid var(--line);background:rgba(19,38,74,.7);border-radius:99px;padding:4px 12px;font-size:12.5px;white-space:nowrap;cursor:pointer;color:var(--mute)}
+.chips.tf{margin:4px 0 8px}
 .chip.on{color:#1a1206;background:linear-gradient(180deg,var(--gold2),var(--gold));border-color:var(--gold);font-weight:700}
 
 /* ---------- list (tab Danh mục) ---------- */
@@ -138,7 +139,7 @@ section.tab.on{display:block}
 
 @media (max-width:860px){
   .grid2{grid-template-columns:minmax(0,1fr);gap:0}
-  .grid2>div{display:contents}
+  .grid2>div:not(.card){display:contents}
   #chartcard{order:1} #fpcard{order:2} #sigcard{order:3}
   .tiles{grid-template-columns:repeat(3,1fr)}
 }

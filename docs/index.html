@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=1">
+<link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
 <header class="top">
@@ -36,7 +36,8 @@
     <div class="grid2">
       <div>
         <div class="card" id="chartcard">
-          <h3><span class="num">1</span>Nến 5 phút · delta · CVD</h3>
+          <h3><span class="num">1</span>Nến <span id="d-tfname">15 phút</span> · delta · CVD</h3>
+          <div class="chips tf" id="d-tf" role="group" aria-label="Khung nến"></div>
           <p class="hint">Chạm vào một nến để xem footprint. Delta = mua chủ động − bán chủ động. CVD = delta cộng dồn từ đầu phiên.</p>
           <div id="d-chart"></div>
           <div class="legend">
@@ -127,7 +128,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

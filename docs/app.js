@@ -46,6 +46,9 @@ async function getJSON(path) {
 }
 let LATEST = null, STATE = null;
 const S = {tab: 'list', sym: null, day: null, sort: 'rel'};
+// Khung nến trong phiên: mặc định 15' (5' nhiều mã chỉ có 2 mức giá/nến — đo 26/09/2026), 5' để phóng to, 30' = kỳ Market Profile.
+const TFS = [5, 15, 30];
+let TF = 15;
 const LS = {get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* riêng tư */ } }};
 
@@ -132,7 +135,7 @@ function renderList() {
   });
   const [, name, cmp] = SORTS.find(s => s[0] === S.sort);
   const rows = [...it].sort((a, b) => sortDesc ? cmp(b, a) : cmp(a, b));
-  $('l-title').textContent = `Danh mục · xếp theo ${name}`;
+  $('l-title').textContent = `Danh mục · xếp theo ${name} · dấu hiệu khung 15'`;
   $('l-list').innerHTML = rows.map(r => {
     const sigs = Object.entries(r.sig).sort().map(([k, n]) => `<span style="color:${SIG[k].c}" title="${SIG[k].name}">${SIG[k].s}${n > 1 ? n : ''}</span>`).join(' ');
     const stale = r.day !== L.day ? `<span class="tag">phiên ${dd(r.day)}</span>` : '';
@@ -158,7 +161,7 @@ function renderList() {
 }
 
 // ---------------------------------------------------------------- ② Trong phiên
-let D = null, sel = 0, chart = null;
+let D = null, V = null, sel = 0, chart = null;   // V = khung đang xem: {bars, sigs}
 async function renderDay(wantDay) {
   fillSymSelect($('d-sym'));
   $('d-sym').onchange = () => go('day', $('d-sym').value);
@@ -189,23 +192,37 @@ async function renderDay(wantDay) {
   ];
   $('d-tiles').innerHTML = tiles.map(([k, v, n, c]) =>
     `<div class="tile"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="n">${n}</div></div>`).join('');
+  showTF();
+}
+
+function showTF() {
+  V = D.tf[String(TF)];
+  $('d-tfname').textContent = TF + ' phút';
+  $('d-tf').innerHTML = TFS.map(t => `<button class="chip ${t === TF ? 'on' : ''}" data-tf="${t}" aria-pressed="${t === TF}">${t}'</button>`).join('');
+  $('d-tf').querySelectorAll('.chip').forEach(b => b.onclick = () => {
+    const keep = V.bars[sel] && V.bars[sel].t;
+    TF = +b.dataset.tf; LS.set('of.tf', TF);
+    showTF();
+    // giữ mốc giờ đang xem khi đổi khung: chọn nến chứa mốc đó
+    if (keep) { const m = mins(keep), i = V.bars.findIndex((x, k) => !x.auction && mins(x.t) <= m && (k + 1 >= V.bars.length || V.bars[k + 1].auction || mins(V.bars[k + 1].t) > m)); if (i >= 0) select(i); }
+  });
   drawIntraday();
-  $('d-sigs').innerHTML = D.sigs.length ? D.sigs.map(s =>
+  $('d-sigs').innerHTML = V.sigs.length ? V.sigs.map(s =>
     `<li><button data-i="${s.i}">${s.t}</button>${sigTag(s.kind)}. ${esc(s.text)}</li>`).join('')
     : `<li class="empty">${D.no_side ? 'Nguồn không có bên chủ động cho mã này — không đánh được dấu hiệu.' : 'Phiên này không có dấu hiệu nào vượt ngưỡng.'}</li>`;
   $('d-sigs').querySelectorAll('button').forEach(b => b.onclick = () => {
     select(+b.dataset.i);
     if (innerWidth <= 860) $('fpcard').scrollIntoView({behavior: 'smooth', block: 'start'});
   });
-  const first = D.sigs.length ? D.sigs[D.sigs.length - 1].i
-    : D.bars.reduce((m, b, i) => Math.abs(b.d) > Math.abs(D.bars[m].d) ? i : m, 0);
+  const first = V.sigs.length ? V.sigs[V.sigs.length - 1].i
+    : V.bars.reduce((m, b, i) => Math.abs(b.d) > Math.abs(V.bars[m].d) ? i : m, 0);
   select(first);
 }
 
 function drawIntraday() {
   const host = $('d-chart');
   host.innerHTML = '';
-  const B = D.bars;
+  const B = V.bars;
   const W = Math.max(300, Math.min(720, host.clientWidth || 720)), L = 40, R = 6, yTop = 14;
   const HP = W < 500 ? 190 : 210, HD = 64, HC = 74, GAP = 16;
   const yP0 = yTop, yD0 = yP0 + HP + GAP, yC0 = yD0 + HD + GAP, H = yC0 + HC + 22;
@@ -258,7 +275,7 @@ function drawIntraday() {
     fill: 'none', stroke: 'var(--gold2)', 'stroke-width': 1.8, 'stroke-linejoin': 'round'}, svg);
   el('text', {x: W - R, y: yC(B[B.length - 1].cvd) - 5, 'text-anchor': 'end', style: 'fill:var(--gold2)'}, svg, smil(B[B.length - 1].cvd));
   B.forEach((b, i) => {
-    if (b.auction || (W < 500 ? /^(10:00|11:00|13:30|14:00)$/ : /^(09:30|10:00|10:30|11:00|13:00|13:30|14:00)$/).test(b.t))
+    if (b.auction || (W < 500 && TF === 5 ? /^(10:00|11:00|13:30|14:00)$/ : /^(09:30|10:00|10:30|11:00|13:00|13:30|14:00)$/).test(b.t))
       el('text', {x: xc(i), y: H - 6, 'text-anchor': 'middle'}, svg, b.t);
   });
   const selRect = el('rect', {y: yTop - 6, height: H - 22 - yTop + 6, width: cw, fill: 'var(--sel)', rx: 2}, gSel);
@@ -270,13 +287,16 @@ function drawIntraday() {
   chart = {selRect, L, cw};
 }
 
+const mins = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 function label(b) {
   if (b.auction) return b.t === 'ATO' ? 'ATO 09:00–09:15' : 'ATC 14:30–14:45';
-  const [h, m] = b.t.split(':').map(Number), e = h * 60 + m + 5;
+  // hết khung = mốc đồng hồ kế tiếp (09:15 ở khung 30' → 09:30); nghỉ trưa 11:30, hết khớp liên tục 14:30
+  let e = (Math.floor(mins(b.t) / TF) + 1) * TF;
+  if (mins(b.t) < 690) e = Math.min(e, 690); else e = Math.min(e, 870);
   return `${b.t}–${String(e / 60 | 0).padStart(2, '0')}:${String(e % 60).padStart(2, '0')}`;
 }
 function select(i) {
-  const B = D.bars;
+  const B = V.bars;
   sel = Math.max(0, Math.min(B.length - 1, i));
   const b = B[sel];
   if (chart) chart.selRect.setAttribute('x', chart.L + chart.cw * sel);
@@ -297,7 +317,7 @@ function select(i) {
       `<td class="${d > 0 ? 'pos' : d < 0 ? 'neg' : ''}">${b.auction ? '' : sgn(d)}</td></tr>`;
   }
   $('fp').innerHTML = h;
-  const sigs = D.sigs.filter(s => s.i === sel);
+  const sigs = V.sigs.filter(s => s.i === sel);
   const imbTxt = b.imb.length ? `<li><b>■ ${b.imb.length} ô imbalance</b>: ${b.imb.map(([p, s]) => (s === 'b' ? 'mua ' : 'bán ') + px(p)).join(', ')}</li>` : '';
   $('fp-sigs').innerHTML = sigs.map(s => `<li>${sigTag(s.kind)}: ${esc(s.text)}</li>`).join('') + imbTxt ||
     '<li class="empty">Nến này không có dấu hiệu nào được đánh.</li>';
@@ -403,6 +423,7 @@ function renderGuide() {
   }
   const saved = LS.get('of.sym');
   S.sym = LATEST.items.some(r => r.sym === saved) ? saved : (LATEST.items[0] || {}).sym;
+  const tf = +LS.get('of.tf'); if (TFS.includes(tf)) TF = tf;
   const so = LS.get('of.sort'); if (SORTS.some(s => s[0] === so)) { S.sort = so; sortDesc = SORTS.find(s => s[0] === so)[3]; }
   $('tagline').textContent = `Dòng lệnh chủ động · ${LATEST.items.length} mã KingStock · phiên ${LATEST.day ? dd(LATEST.day) : '–'}`;
   let t;

@@ -11,7 +11,7 @@ Không phụ thuộc price-path (chỉ nạp dữ liệu cũ một lần bằng 
 
 ```
 KingStock /api/watchlist ──► job/watchlist.py (bản chụp docs/data/watchlist.json nếu Fly chết)
-VNDirect stock_intraday_latest ──► common/vndirect.py ──► flow/ticks.py ──► data/store/<MÃ>/<ngày>.json   (giữ mãi)
+VNDirect stock_intraday_latest ──► common/vndirect.py ──► flow/ticks.py ──► data/store/<MÃ>/<ngày>.json   (nến 5', giữ mãi)
                                                                         └► flow/signals.py ─► docs/data/intraday/<ngày>/<MÃ>.json (60 phiên)
 DNSE nến ngày (hệ số điều chỉnh) ──► flow/daily.py ──► docs/data/daily/<MÃ>.json (40 phiên), latest.json, state.json
 ```
@@ -45,8 +45,16 @@ Không có `--virtual-time-budget` thì ảnh chụp trước khi fetch xong (tr
 `daily.yml`: step gom `continue-on-error`, commit `if: always()`, báo đỏ sau cùng theo `steps.collect.outcome`
 (bài học price-path 23/09/2026). Chạy tay: Actions → daily → Run workflow (`force` / `rebuild`).
 
-Dung lượng: kho ≈ 340 KB/phiên (39 mã), docs intraday ≈ 610 KB/phiên → repo tăng ~240 MB/năm; khi quá lớn thì
+Dung lượng: kho ≈ 340 KB/phiên (39 mã), docs intraday ≈ 950 KB/phiên (3 khung) → repo tăng ~240 MB/năm; khi quá lớn thì
 thu gọn lịch sử kho (nén hoặc bỏ `lv` của nến cũ).
+
+## Khung nến trong phiên
+
+Kho lưu nến **5'**; job gộp thêm **15'** và **30'** (`flow/ticks.resample`) và đánh dấu hiệu riêng cho từng khung
+(`intraday/<ngày>/<MÃ>.json` → `tf: {"5","15","30"}`). App mặc định **15'**, nút 5' để phóng to, 30' = kỳ Market Profile.
+Lý do (đo phiên 25/09/2026): ở 5' nhiều mã có 50–80 % nến chỉ 2 mức giá — footprint không đọc được (bước giá VN
+≈ 0,15 %, cả phiên chỉ ~10 bước). Ngưỡng dấu hiệu tính theo PHÚT (`FAIL_MIN`, `WARM_MIN`, `DIV_GAP_MIN`), khung 5'
+cho kết quả y như bản mẫu. Tab Danh mục đếm dấu hiệu khung 15'.
 
 ## Giao diện
 

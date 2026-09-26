@@ -90,3 +90,28 @@ def test_fpt_golden_session():
     # nến đóng đúng giữa thân không còn bị gắn cờ hấp thụ
     assert ("10:30", "absorb_s") not in got and ("13:30", "absorb_s") not in got
     assert len(sigs) == 13
+
+
+@pytest.mark.skipif(not FPT.exists(), reason="chưa seed kho")
+@pytest.mark.parametrize("tf,n_cont", [(15, 15), (30, 8)])
+def test_resample_preserves_volume(tf, n_cont):
+    from flow.ticks import resample
+    rec = json.loads(FPT.read_text(encoding="utf-8"))
+    bars = resample(rec["bars"], tf)
+    assert [b["t"] for b in bars if b["auction"]] == ["ATO", "ATC"]
+    assert sum(1 for b in bars if not b["auction"]) == n_cont
+    for k in ("buy", "sell", "x", "bb", "bs"):
+        assert sum(b[k] for b in bars) == sum(b[k] for b in rec["bars"])
+    for b in bars:  # Σ từng mức giá = tổng của nến
+        assert sum(r[1] for r in b["lv"]) == b["sell"] and sum(r[2] for r in b["lv"]) == b["buy"]
+    # nến chiều đầu tiên bắt đầu đúng 13:00, không dính nến 11:25
+    assert "13:00" in [b["t"] for b in bars]
+
+
+@pytest.mark.skipif(not FPT.exists(), reason="chưa seed kho")
+def test_fpt_15m_reads_break_not_absorption():
+    # Ở 15', nến 13:00–13:15 đã thủng 65,0 xuống 64,8 → không còn "hấp thụ" mà là imbalance bán xếp chồng
+    rec = json.loads(FPT.read_text(encoding="utf-8"))
+    bars, sigs = signals.analyse(rec["bars"], "HOSE", 15)
+    got = {(s["t"], s["kind"]) for s in sigs}
+    assert ("13:00", "stack_s") in got and not any(k == "absorb_b" and t == "13:00" for t, k in got)

@@ -89,6 +89,36 @@ def session_bars(ticks: list[dict]) -> list[dict]:
     return out
 
 
+def resample(bars: list[dict], tf: int) -> list[dict]:
+    """Gộp nến 5' thô của kho lên khung tf phút (bội của 5), theo mốc đồng hồ (09:30, 10:00…). ATO/ATC giữ nguyên."""
+    if tf == BAR_MIN:
+        return bars
+    out: list[dict] = []
+    cur, cur_key = None, None
+    for b in bars:
+        if b["auction"]:
+            cur = None
+            out.append(b)
+            continue
+        key = _minute(b["t"]) // tf
+        if cur is None or cur_key != key:
+            # nhãn = mốc thật của nến 5' đầu tiên trong khung (khung 30' đầu phiên bắt đầu 09:15, không phải 09:00)
+            cur_key = key
+            cur = {"t": b["t"], "auction": False, "o": b["o"], "h": b["h"], "l": b["l"], "c": b["c"],
+                   "buy": 0, "sell": 0, "x": 0, "bb": 0, "bs": 0, "lv": {}}
+            out.append(cur)
+        cur["h"], cur["l"], cur["c"] = max(cur["h"], b["h"]), min(cur["l"], b["l"]), b["c"]
+        for k in ("buy", "sell", "x", "bb", "bs"):
+            cur[k] += b[k]
+        for p, s, bu, x in b["lv"]:
+            row = cur["lv"].setdefault(p, [0, 0, 0])
+            row[0] += s; row[1] += bu; row[2] += x
+    for b in out:
+        if isinstance(b["lv"], dict):
+            b["lv"] = [[p, *r] for p, r in sorted(b["lv"].items(), reverse=True)]
+    return out
+
+
 def session_record(ticks: list[dict]) -> dict:
     """Bản ghi một phiên để lưu kho data/store/<MÃ>/<ngày>.json."""
     total = sum(t["vol"] for t in ticks)
