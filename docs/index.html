@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 <header class="top">
@@ -127,6 +127,40 @@
       <h3><span class="num">3</span>Hệ thống</h3>
       <ul class="plain" id="g-state"></ul>
     </div>
+    <div class="card">
+      <h3><span class="num">4</span>Đọc tab Nhiều phiên</h3>
+      <p class="hint">Biểu đồ có 3 tầng, đọc từ trên xuống. <a href="#days" class="gold">Mở tab Nhiều phiên</a></p>
+      <h4 class="gh">Tầng 1 · Footprint từng phiên</h4>
+      <p class="gp">Mỗi cột là một phiên, trục dọc là giá (đã quy về giá điều chỉnh). Độ dài thanh dùng chung một thang cho mọi cột nên so được giữa các phiên.</p>
+      <dl class="defs">
+        <dt style="color:var(--sell)">Thanh đỏ ←</dt><dd>KL bán chủ động ở mức giá đó. <span>Người bán đập vào lệnh mua đang chờ.</span></dd>
+        <dt style="color:var(--buy)">Thanh xanh →</dt><dd>KL mua chủ động ở mức giá đó. <span>Người mua kéo lên khớp lệnh bán đang chờ.</span></dd>
+        <dt>Vạch kem dài</dt><dd>Giá đóng cửa.</dd>
+        <dt style="color:var(--x)">Thanh xám</dt><dd>KL ATO + ATC (khớp định kỳ, không có bên chủ động). <span>Ghi "AT 8,58 tr »" khi quá lớn so với thang và bị cắt.</span></dd>
+        <dt class="vw">Vạch tím ngắn</dt><dd>VWAP phiên: giá khớp bình quân theo KL, chỉ tính khớp liên tục.</dd>
+        <dt class="vw">Tím nét đứt</dt><dd>AVWAP: VWAP cộng dồn từ phiên đầu khung đang xem, tức giá vốn bình quân của mọi người đã mua từ đó. <span>Giá dưới AVWAP: phần lớn người mua trong khung đang lỗ.</span></dd>
+      </dl>
+      <ul class="plain">
+        <li><b>Đóng cửa trên VWAP:</b> cuối phiên giá được kéo lên trên mặt bằng giao dịch. <b>Dưới VWAP:</b> cuối phiên yếu hơn mặt bằng. Sát VWAP: phiên cân bằng.</li>
+        <li><b>Vạch đóng cửa nằm tách xa cả cụm thanh:</b> thường do ATC khớp một giá rất khác phiên, nhất là ngày ETF cơ cấu. Không phải bán tháo trong phiên.</li>
+        <li><b>Cụm thanh dài</b> = phiên biên độ rộng; <b>cụm dồn thấp dần</b> qua các cột = mặt bằng giá đang tụt.</li>
+      </ul>
+      <h4 class="gh">Tầng 2 · Delta từng phiên</h4>
+      <p class="gp">Delta = mua chủ động − bán chủ động (triệu cổ phiếu). Tick VN lệch về phía bán ở gần như mọi mã nên delta âm là bình thường.
+        Đừng đọc số tuyệt đối, hãy xem cột <b>so TB</b> ở bảng: dương là mua mạnh hơn thường lệ của chính mã đó, âm là bán mạnh hơn.</p>
+      <h4 class="gh">Tầng 3 · CVD so với giá</h4>
+      <p class="gp">Đường vàng là CVD (delta cộng dồn), đường nét đứt là giá đóng cửa. <b>Mỗi đường một thang riêng</b>: chỉ so hướng đi, không so độ cao.
+        Giá đi lên mà CVD đi xuống là phân kỳ: giá tăng không có thêm mua chủ động đỡ.</p>
+      <h4 class="gh">Ví dụ: FPT 18/09 → 25/09/2026</h4>
+      <ul class="plain">
+        <li><b>18/09</b> đóng 65,18, VWAP 67,55 (<span class="neg">−3,51 %</span>): ngày ETF cơ cấu, ATC 8,58 tr cp = 55 % KL, khớp thấp hơn hẳn phiên. Chênh lệch do ETF.</li>
+        <li><b>21/09</b> đóng 66,4 trên VWAP 65,88 (<span class="pos">+0,78 %</span>): phiên rộng nhất, cuối phiên được kéo lên. <b>22/09</b> đóng đúng VWAP (+0,06 %): cân bằng.</li>
+        <li><b>23 → 25/09</b> đóng dưới hoặc sát VWAP, cụm thanh tụt từ 66 xuống 65; 25/09 đỏ dồn ở 65,0–65,2, so TB <span class="neg">−10,8</span>: bán mạnh nhất so với thường lệ.</li>
+        <li><b>AVWAP 66,28</b> so giá 64,7: thấp hơn giá vốn bình quân khoảng 2,4 %, phần lớn người mua từ 18/09 đang lỗ.</li>
+        <li><b>CVD:</b> 18 → 22/09 giá lên nhưng CVD xuống (phân kỳ); từ 22/09 giá quay xuống theo CVD.</li>
+      </ul>
+      <p class="gp"><b>Đây là bản đồ mô tả chuyện đã xảy ra, không phải tín hiệu mua bán.</b> Vị trí giá so với VWAP/POC, delta, CVD đều đã đo và chưa cho lợi thế dự báo.</p>
+    </div>
   </section>
 </div>
 
@@ -137,7 +171,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

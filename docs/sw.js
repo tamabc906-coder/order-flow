@@ -1,7 +1,7 @@
 // Chỉ cache vỏ app để mở nhanh/offline. Dữ liệu (data/*.json) luôn đi mạng trước, rớt mạng mới dùng bản cũ.
 // Push điện thoại làm giai đoạn sau. Đổi CACHE khi đổi ?v= trong index.html.
-const CACHE = 'of-shell-v3';
-const SHELL = ['./', './index.html', './styles.css?v=3', './app.js?v=3', './manifest.webmanifest', './icons/icon-192.png'];
+const CACHE = 'of-shell-v4';
+const SHELL = ['./', './index.html', './styles.css?v=4', './app.js?v=4', './manifest.webmanifest', './icons/icon-192.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

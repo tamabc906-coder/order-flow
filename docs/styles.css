@@ -126,6 +126,8 @@ dl.defs dd{margin:0}
 dl.defs dd span{color:var(--mute)}
 ul.plain{margin:6px 0 0;padding-left:18px;font-size:13px}
 ul.plain li{margin:4px 0}
+h4.gh{margin:14px 0 4px;font-size:13px;color:var(--gold2);letter-spacing:.02em}
+p.gp{margin:4px 0;font-size:13px}
 .ok{color:var(--buy)} .bad{color:var(--sell);font-weight:700}
 
 /* ---------- bottom nav ---------- */
