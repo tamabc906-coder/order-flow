@@ -1,0 +1,4 @@
+# Actions chỉ cần httpx. pytest/pillow cho máy dev (test, vẽ icon).
+httpx==0.28.1
+pytest==8.3.4
+pillow==11.0.0

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1628">
+<title>Order Flow</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+<header class="top">
+  <img src="icons/icon-192.png" alt="">
+  <div>
+    <div class="brand">Order Flow</div>
+    <div class="tagline" id="tagline">Dòng lệnh chủ động · danh mục KingStock</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- ① Danh mục -->
+  <section class="tab" id="t-list">
+    <div class="tiles" id="l-tiles"></div>
+    <div class="chips" id="l-sort"></div>
+    <h2 class="sec" id="l-title">Danh mục</h2>
+    <div class="list" id="l-list"></div>
+  </section>
+
+  <!-- ② Trong phiên -->
+  <section class="tab" id="t-day">
+    <div class="ctrl"><select id="d-sym" aria-label="Mã"></select><select id="d-date" aria-label="Phiên"></select>
+      <span class="pill" id="d-pill"></span></div>
+    <div class="tiles" id="d-tiles"></div>
+    <div class="grid2">
+      <div>
+        <div class="card" id="chartcard">
+          <h3><span class="num">1</span>Nến 5 phút · delta · CVD</h3>
+          <p class="hint">Chạm vào một nến để xem footprint. Delta = mua chủ động − bán chủ động. CVD = delta cộng dồn từ đầu phiên.</p>
+          <div id="d-chart"></div>
+          <div class="legend">
+            <span><span class="sw" style="background:var(--buy)"></span>mua chủ động / nến tăng</span>
+            <span><span class="sw" style="background:var(--sell)"></span>bán chủ động / nến giảm</span>
+            <span><span class="sw" style="background:var(--x)"></span>ATO/ATC</span>
+            <span><i style="color:var(--gold2)">—</i> CVD</span>
+            <span><i>◆</i> hấp thụ</span><span><i>✕</i> hấp thụ thất bại</span><span><i>≡</i> xếp chồng</span>
+            <span><i>⚠</i> phân kỳ</span><span><i>▽△</i> cạn kiệt</span>
+          </div>
+        </div>
+        <div class="card bronze" id="sigcard">
+          <h3><span class="num">3</span>Dấu hiệu trong phiên</h3>
+          <ul class="siglist" id="d-sigs"></ul>
+        </div>
+      </div>
+      <div class="card" id="fpcard">
+        <h3><span class="num">2</span>Footprint nến đang chọn</h3>
+        <div class="fphead">
+          <div><div class="t" id="fp-title"></div><div class="ohlc" id="fp-ohlc"></div></div>
+          <div class="nav"><button id="fp-prev" aria-label="Nến trước">‹</button> <button id="fp-next" aria-label="Nến sau">›</button></div>
+        </div>
+        <table class="fp" id="fp"></table>
+        <div class="legend">
+          <span>● POC (mức khớp nhiều nhất)</span>
+          <span><span class="sw" style="background:var(--buy-soft)"></span>imbalance mua ≥3×</span>
+          <span><span class="sw" style="background:var(--sell-soft)"></span>imbalance bán ≥3×</span>
+        </div>
+        <ul class="siglist" id="fp-sigs"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ Nhiều phiên -->
+  <section class="tab" id="t-days">
+    <div class="ctrl"><select id="m-sym" aria-label="Mã"></select><span class="pill" id="m-pill"></span></div>
+    <div class="card">
+      <h3><span class="num">1</span>Footprint từng phiên</h3>
+      <p class="hint">Mỗi cột là một phiên: đỏ sang trái là bán chủ động, xanh sang phải là mua chủ động, theo từng mức giá
+        (đã quy về giá điều chỉnh). Vạch kem là giá đóng cửa, thanh xám là KL ATO/ATC.</p>
+      <div id="m-chart"></div>
+    </div>
+    <div class="card bronze">
+      <h3><span class="num">2</span>Bảng theo phiên</h3>
+      <p class="hint" style="color:#E7D6B5">Cột <b>so TB</b> = tỷ lệ mua chủ động của phiên trừ trung bình tối đa 20 phiên trước của chính mã này.
+        Tick VN lệch về phía bán ở hầu hết mã, nên đọc cột này thay cho delta tuyệt đối.</p>
+      <div class="scroll"><table class="days" id="m-table"></table></div>
+    </div>
+  </section>
+
+  <!-- ④ Hướng dẫn -->
+  <section class="tab" id="t-guide">
+    <div class="card">
+      <h3><span class="num">1</span>Đọc dấu hiệu</h3>
+      <dl class="defs">
+        <dt style="color:var(--buy)">◆ Hấp thụ</dt><dd>Bán chủ động dồn vào đúng một mức giá ở đáy nến mà giá không xuống thêm, hoặc delta âm mạnh mà giá đóng hẳn ở nửa trên. <span>Có người mua đặt lệnh chờ nuốt hết (◆ đỏ là chiều ngược lại).</span></dd>
+        <dt>✕ Hấp thụ thất bại</dt><dd>Trong 30 phút sau, giá phá qua mức vừa hấp thụ. <span>Bên đặt chờ đã thua; theo lý thuyết đây là tín hiệu đi tiếp mạnh hơn cả hấp thụ.</span></dd>
+        <dt>■ Imbalance</dt><dd>Ở một mức giá, một bên gấp ≥ 3 lần bên kia (so chéo 1 bước giá). <span>Tô nền trong bảng footprint.</span></dd>
+        <dt>≡ Xếp chồng</dt><dd>Từ 2 ô imbalance cùng bên liền nhau. <span>Thường thành hỗ trợ/kháng cự. Sách đòi 3 ô, nhưng bước giá cổ phiếu VN thô nên nến 5' hiếm khi có đủ 3 mức.</span></dd>
+        <dt>⚠ Phân kỳ</dt><dd>Giá tạo đáy/đỉnh mới trong phiên nhưng CVD không theo. <span>Bên đang thắng dùng ít lệnh chủ động hơn trước.</span></dd>
+        <dt>▽△ Cạn kiệt</dt><dd>Nến chạm đáy/đỉnh mới nhưng ở mức giá cực trị gần như không khớp gì. <span>Không còn ai đuổi tiếp.</span></dd>
+      </dl>
+    </div>
+    <div class="card bronze">
+      <h3><span class="num">2</span>Lưu ý riêng thị trường Việt Nam</h3>
+      <ul class="plain">
+        <li>Đây là <b>thống kê mô tả</b>, không phải tín hiệu mua bán: đo 16 phép order flow trên 39 mã × 47 phiên (25/09/2026), không phép nào qua cổng.</li>
+        <li>Tick VN lệch về phía bán ở gần như mọi mã, nên delta/CVD âm nhiều phiên liền chưa chắc là xấu. Đọc cột <b>so TB</b>.</li>
+        <li>Bước giá thô (0,1 ≈ 0,15 % với mã 65 nghìn): nhiều nến 5' chỉ có 2 mức giá, bán nằm ở giá dưới, mua ở giá trên.</li>
+        <li>Không bán khống trong phiên: bán chủ động chỉ đến từ người đang cầm hàng.</li>
+        <li>ATO/ATC không có bên chủ động nên tô xám và không cộng vào delta/CVD. Ngày ETF cơ cấu ATC có thể chiếm hơn nửa KL.</li>
+        <li>Sổ lệnh công khai chỉ có 3 bước giá, không thấy lệnh chờ lớn. Hấp thụ chỉ suy ra được từ lệnh đã khớp.</li>
+        <li>Nguồn VNDirect thỉnh thoảng bỏ sót tick lẻ; số cp hụt hiện ở ô đầu tab Trong phiên.</li>
+        <li>Phiên 18–24/09/2026 chỉ có footprint cả ngày (nạp từ kho cũ), chưa có nến 5'.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="num">3</span>Hệ thống</h3>
+      <ul class="plain" id="g-state"></ul>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs">
+  <a href="#list" data-tab="list"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Danh mục</a>
+  <a href="#day" data-tab="day"><svg viewBox="0 0 24 24"><path d="M6 4v16M12 7v10M18 5v14"/><path d="M4 9h4M10 12h4M16 8h4"/></svg>Trong phiên</a>
+  <a href="#days" data-tab="days"><svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16"/><path d="M8 15l4-4 3 3 5-6"/></svg>Nhiều phiên</a>
+  <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
+</nav>
+
+<script src="app.js?v=1"></script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

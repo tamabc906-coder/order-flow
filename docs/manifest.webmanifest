@@ -1,0 +1,16 @@
+{
+  "name": "Order Flow",
+  "short_name": "Order Flow",
+  "description": "Dòng lệnh mua/bán chủ động, footprint và dấu hiệu order flow cho danh mục KingStock",
+  "lang": "vi",
+  "start_url": "./#list",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0B1628",
+  "theme_color": "#0B1628",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

@@ -1,0 +1,70 @@
+# Job sau phiên. 09:00 UTC = 16:00 VN (sau job zone 15:50 của price-path — tránh hai repo cùng dồn VNDirect).
+# Dự phòng 16:30, 18:30 VN nếu GitHub trễ/bỏ; và 08:15 VN sáng hôm sau (T3–T7) vì VNDirect chỉ giữ tick của
+# PHIÊN GẦN NHẤT — tới ~09:00 phiên mới bắt đầu là mất. Job idempotent theo (mã, ngày): lượt dự phòng không
+# có gì mới thì dữ liệu dựng lại giống hệt → không có diff → không commit.
+name: daily
+
+on:
+  schedule:
+    - cron: "0 9 * * 1-5"
+    - cron: "30 9 * * 1-5"
+    - cron: "30 11 * * 1-5"
+    - cron: "15 1 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Gom lại cả mã đã có phiên (ghi đè)"
+        default: "false"
+      rebuild:
+        description: "Chỉ dựng lại docs/data từ kho, không gọi VNDirect"
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Bài học price-path 23/09/2026: job trả 1 để BÁO "có mã lỗi" nhưng đã ghi xong dữ liệu. Thiếu
+      # continue-on-error + commit if: always() thì một mã lỗi làm mất trắng dữ liệu của các mã còn lại.
+      - name: Gom tick + dựng dữ liệu
+        id: collect
+        continue-on-error: true
+        run: |
+          ARGS=
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          if [ "${{ github.event.inputs.rebuild }}" = "true" ]; then ARGS="$ARGS --rebuild"; fi
+          python -m job.run_daily $ARGS
+
+      - name: Commit kết quả
+        if: always()
+        run: |
+          git config user.name "order-flow-bot"
+          git config user.email "order-flow-bot@users.noreply.github.com"
+          git add -A data/store docs/data
+          if git diff --cached --quiet; then echo "không có gì mới"; exit 0; fi
+          git commit -m "data: $(date -u +%Y-%m-%d) [skip ci]"
+          git pull --rebase
+          git push
+
+      # Commit xong RỒI mới báo đỏ. continue-on-error làm failure() không còn đúng → xét outcome của step đó.
+      - name: Báo đỏ nếu có mã lỗi
+        if: steps.collect.outcome == 'failure'
+        run: |
+          echo "::error::Có mã lỗi — xem docs/data/state.json"
+          exit 1
