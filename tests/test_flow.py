@@ -139,3 +139,35 @@ def test_big_order_value_and_daily_vwap():
     assert bbv / bb == pytest.approx(65.13, abs=0.01)   # giá vốn lệnh lớn mua CĐ, khớp order-flow-lab
     d = daily.days([rec], {})[-1]
     assert d["vw"] == pytest.approx(65.046, abs=1e-3) and d["vwv"] == 1_001_700 + 2_336_200
+
+
+# ---------------------------------------------------------------- footprint cá mập (27/09/2026)
+def test_big_orders_split_by_price_level():
+    # 20.000 cp × 30 = 600 tr (lớn, mua) · 20.000 cp × 29,9 bán chủ động = 598 tr (lớn, bán) · 100 cp mua (nhỏ)
+    t = [tk("10:00:00", 30.0, 20000, "PS", 20000), tk("10:00:05", 29.9, 20000, "PB", 40000),
+         tk("10:00:09", 30.0, 100, "PS", 40100)]
+    bar = session_record(t)["bars"][0]
+    assert bar["blv"] == [[30.0, 0, 20000], [29.9, 20000, 0]]          # [giá, bán_lớn, mua_lớn]
+    assert sum(r[2] for r in bar["blv"]) == bar["bb"] and sum(r[1] for r in bar["blv"]) == bar["bs"]
+
+
+def test_fpt_blv_matches_totals_and_survives_resample():
+    rec = json.loads(FPT.read_text(encoding="utf-8"))
+    for b in rec["bars"]:
+        assert sum(r[2] for r in b["blv"]) == b["bb"] and sum(r[1] for r in b["blv"]) == b["bs"]
+    from flow.ticks import resample
+    m30 = [b for b in resample(rec["bars"], 30) if not b["auction"]]
+    assert sum(r[2] for b in m30 for r in b["blv"]) == sum(b["bb"] for b in rec["bars"])
+
+
+def test_days_whale_footprint_from_zone_and_ticks():
+    zone = {"date": "2026-09-24", "src": "zone", "close": 10.0, "total": 900,
+            "levels": [[10.1, 100, 300, 0, 200, 0], [10.0, 400, 100, 0, 0, 300]]}   # [giá, bán, mua, x, mua_lớn, bán_lớn]
+    tick = session_record([tk("10:00:00", 25.0, 30000, "PS", 30000, "2026-09-25")])
+    tick.update(date="2026-09-25")
+    old = json.loads(json.dumps(tick)); [b.pop("blv") for b in old["bars"]]     # bản ghi trước 27/09 chưa có blv
+    d = daily.days([zone, tick], {})
+    assert d[0]["blv"] == [[10.1, 0, 200], [10.0, 300, 0]] and d[0]["blv_ok"]
+    assert d[1]["blv"] == [[25.0, 0, 30000]] and (d[1]["bb"], d[1]["bs"]) == (30000, 0)
+    o = daily.days([old], {})[0]
+    assert o["blv_ok"] is False and o["blv"] == []

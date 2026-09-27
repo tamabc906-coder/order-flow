@@ -358,6 +358,7 @@ async function renderDays() {
   $('m-sym').onchange = () => go('days', $('m-sym').value);
   const host = $('m-chart');
   host.innerHTML = '';
+  $('m-whale').innerHTML = '';
   let data;
   try { data = await getJSON(`daily/${S.sym}.json`); } catch (e) { host.innerHTML = '<p class="empty">Không tải được dữ liệu mã này.</p>'; return; }
   const Ds = data.days.slice(-20);
@@ -423,6 +424,8 @@ async function renderDays() {
   el('text', {x: L2 - 4, y: yc0 + 8, 'text-anchor': 'end'}, s2, 'CVD');
   el('text', {x: W2 - R2, y: yc0 - 4, 'text-anchor': 'end'}, s2, W2 < 500 ? '— CVD   - - giá' : '— CVD (vàng)   - - giá đóng cửa (mỗi đường một thang riêng)');
 
+  drawWhale(Ds, {W2, L2, R2, H1, lo, hi, colW, half});
+
   let t = '<tr><th>Phiên</th><th>Đóng cửa</th><th class="vw">VWAP</th><th title="Đóng cửa so với VWAP khớp liên tục của phiên">Đóng/VWAP</th><th>Mua CĐ</th><th>Bán CĐ</th><th>Delta</th><th title="Mua CĐ / (mua CĐ + bán CĐ)">Mua CĐ %</th><th title="So với trung bình tối đa 20 phiên trước của chính mã này">so TB</th><th>CVD</th><th>ATO/ATC</th><th>Lệnh lớn ròng</th></tr>';
   for (const d of [...data.days].reverse()) t += `<tr><td>${d.intraday ? `<a href="#day/${S.sym}/${d.d}" class="gold">${dd(d.d)}</a>` : dd(d.d)}${d.f !== 1 ? `<span class="tag" title="Giá thô ${px(d.raw)} × ${d.f}">điều chỉnh</span>` : ''}${d.gap ? `<span class="tag">hụt ${fmt(d.gap)}</span>` : ''}</td>` +
     `<td>${px(d.close)}</td><td class="vw">${d.vw == null ? '–' : px(d.vw)}</td>` +
@@ -431,6 +434,57 @@ async function renderDays() {
     `<td class="${d.cvd >= 0 ? 'pos' : 'neg'}">${smil(d.cvd)}</td><td>${(d.x / ((d.buy + d.sell + d.x) || 1) * 100).toFixed(0)} %</td>` +
     `<td class="${d.big >= 0 ? 'pos' : 'neg'}">${smil(d.big)}</td></tr>`;
   $('m-table').innerHTML = t;
+}
+
+// Footprint cá mập (27/09/2026): cùng cột phiên + trục giá với footprint trên (g = hình học của nó), chỉ lệnh ≥ 500 tr đ.
+// d.blv = [[giá, bán_lớn, mua_lớn]] đã quy giá điều chỉnh; d.blv_ok = false khi phiên chưa lưu cá mập theo mức giá.
+function drawWhale(Ds, g) {
+  const host = $('m-whale');
+  host.innerHTML = '';
+  const {W2, L2, R2, H1, lo, hi, colW, half} = g;
+  const y10 = 10, HDl = 56, G = 18, yd0 = y10 + H1 + G + 12, H2 = yd0 + HDl + 22;
+  const y = p => y10 + (hi - p) / (hi - lo) * H1;
+  let mx = 1;
+  for (const d of Ds) for (const [, s, b] of d.blv || []) mx = Math.max(mx, s, b);
+  const s2 = el('svg', {viewBox: `0 0 ${W2} ${H2}`, role: 'img', 'aria-label': 'Footprint cá mập theo phiên và delta cá mập'}, host);
+  const r = hi - lo, st = r > 20 ? 5 : r > 6 ? 2 : r > 3 ? 1 : r > 1.2 ? .5 : .2;
+  for (let p = Math.ceil(lo / st) * st; p <= hi; p += st) {
+    el('line', {x1: L2, x2: W2 - R2, y1: y(p), y2: y(p), stroke: 'var(--grid)'}, s2);
+    el('text', {x: L2 - 4, y: y(p) + 3, 'text-anchor': 'end'}, s2, px(+p.toFixed(2)));
+  }
+  Ds.forEach((d, k) => {
+    const cx = L2 + colW * (k + .5);
+    el('line', {x1: cx, x2: cx, y1: y10, y2: y10 + H1, stroke: 'var(--line)'}, s2);
+    el('text', {x: cx, y: y10 + H1 + 14, 'text-anchor': 'middle', style: 'font-weight:600;fill:var(--ink)'}, s2, dd(d.d));
+    if (d.blv_ok === false || d.blv == null) {
+      el('text', {x: cx, y: y10 + H1 / 2, 'text-anchor': 'middle', style: 'fill:var(--mute)'}, s2, 'chưa có');
+      return;
+    }
+    // độ dày thanh lấy theo bước giá của footprint trên → hai biểu đồ thẳng hàng từng mức giá
+    const ps = d.lv.map(q => q[0]);
+    let gapMin = Infinity; for (let j = 1; j < ps.length; j++) gapMin = Math.min(gapMin, ps[j - 1] - ps[j]);
+    const th = Math.max(1.5, Math.min(12, (isFinite(gapMin) ? gapMin : .1) / (hi - lo) * H1 * .82));
+    for (const [p, s, b] of d.blv) {
+      if (s) el('title', {}, el('rect', {x: cx - s / mx * half, y: y(p) - th / 2, width: s / mx * half, height: th, fill: 'var(--sell)', opacity: .92}, s2), `${px(p)}: cá mập bán ${mil(s)}`);
+      if (b) el('title', {}, el('rect', {x: cx, y: y(p) - th / 2, width: b / mx * half, height: th, fill: 'var(--buy)', opacity: .92}, s2), `${px(p)}: cá mập mua ${mil(b)}`);
+    }
+    if (!d.blv.length) el('text', {x: cx, y: y10 + H1 / 2, 'text-anchor': 'middle', style: 'fill:var(--mute)'}, s2, 'không có');
+    el('line', {x1: cx - half, x2: cx + half, y1: y(d.close), y2: y(d.close), stroke: 'var(--ink)', 'stroke-width': 1.2, opacity: .7}, s2);
+  });
+  const md = Math.max(1, ...Ds.map(d => Math.abs(d.big || 0)));
+  const ydl = v => yd0 + HDl / 2 - v / md * HDl / 2;
+  el('text', {x: L2 - 4, y: yd0 + 4, 'text-anchor': 'end'}, s2, 'Delta');
+  el('text', {x: L2 - 4, y: yd0 + 15, 'text-anchor': 'end'}, s2, 'cá mập');
+  el('line', {x1: L2, x2: W2 - R2, y1: ydl(0), y2: ydl(0), stroke: 'var(--line)'}, s2);
+  Ds.forEach((d, k) => {
+    const cx = L2 + colW * (k + .5), w = colW * .36, v = d.big || 0;
+    el('rect', {x: cx - w / 2, y: Math.min(ydl(v), ydl(0)), width: w, height: Math.max(1, Math.abs(ydl(v) - ydl(0))),
+      fill: v >= 0 ? 'var(--buy)' : 'var(--sell)', rx: 1}, s2);
+    if (colW > 28) el('text', {x: cx, y: v >= 0 ? ydl(v) - 3 : ydl(v) + 10, 'text-anchor': 'middle'}, s2, smil(v).replace(' tr', ''));
+    const act = (d.buy || 0) + (d.sell || 0);
+    if (colW > 40 && act && d.bb != null) el('text', {x: cx, y: H2 - 4, 'text-anchor': 'middle', style: 'fill:var(--mute)'}, s2,
+      `CM ${Math.round((d.bb + d.bs) / act * 100)} % KL`);
+  });
 }
 
 // ---------------------------------------------------------------- ④ Hướng dẫn

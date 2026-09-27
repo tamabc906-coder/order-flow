@@ -83,8 +83,16 @@
         đường tím nét đứt là AVWAP: giá vốn bình quân của mọi người mua từ phiên đầu khung đang xem.</p>
       <div id="m-chart"></div>
     </div>
+    <div class="card">
+      <h3><span class="num">2</span>Footprint cá mập</h3>
+      <p class="hint">Cùng cột phiên và trục giá với biểu đồ trên, nhưng chỉ tính <b>lệnh cá mập</b>: lệnh gộp cùng giây, cùng giá,
+        cùng chiều có giá trị từ 500 triệu đồng. Đỏ sang trái là cá mập bán chủ động, xanh sang phải là cá mập mua chủ động.
+        Thanh dùng <b>thang riêng</b> (lệnh cá mập lớn nhất trong khung dài bằng nửa cột), nên không so độ dài với biểu đồ trên được.
+        Hàng dưới là delta cá mập = mua lớn − bán lớn (triệu cp) và tỷ lệ KL cá mập trong KL chủ động của phiên.</p>
+      <div id="m-whale"></div>
+    </div>
     <div class="card bronze">
-      <h3><span class="num">2</span>Bảng theo phiên</h3>
+      <h3><span class="num">3</span>Bảng theo phiên</h3>
       <p class="hint" style="color:#E7D6B5">Cột <b>so TB</b> = tỷ lệ mua chủ động của phiên trừ trung bình tối đa 20 phiên trước của chính mã này.
         Tick VN lệch về phía bán ở hầu hết mã, nên đọc cột này thay cho delta tuyệt đối.</p>
       <div class="scroll"><table class="days" id="m-table"></table></div>
@@ -145,6 +153,10 @@
         <li><b>Vạch đóng cửa nằm tách xa cả cụm thanh:</b> thường do ATC khớp một giá rất khác phiên, nhất là ngày ETF cơ cấu. Không phải bán tháo trong phiên.</li>
         <li><b>Cụm thanh dài</b> = phiên biên độ rộng; <b>cụm dồn thấp dần</b> qua các cột = mặt bằng giá đang tụt.</li>
       </ul>
+      <h4 class="gh">Footprint cá mập (thẻ 2, ngay dưới)</h4>
+      <p class="gp">Cùng cách đọc, nhưng chỉ còn lệnh từ 500 triệu đồng. So hai biểu đồ ở cùng một mức giá:
+        biểu đồ trên đỏ dày mà biểu đồ cá mập xanh dày nghĩa là nhỏ lẻ bán ra, cá mập gom vào ở giá đó; ngược lại là cá mập xả cho nhỏ lẻ.
+        Cột ghi "chưa có" là phiên chưa lưu cá mập theo mức giá.</p>
       <h4 class="gh">Tầng 2 · Delta từng phiên</h4>
       <p class="gp">Delta = mua chủ động − bán chủ động (triệu cổ phiếu). Tick VN lệch về phía bán ở gần như mọi mã nên delta âm là bình thường.
         Đừng đọc số tuyệt đối, hãy xem cột <b>so TB</b> ở bảng: dương là mua mạnh hơn thường lệ của chính mã đó, âm là bán mạnh hơn.</p>
@@ -171,7 +183,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 <script>
 if ('serviceWorker' in navigator) {
   // Bản mới tiếp quản (skipWaiting + claim) → tải lại một lần để thấy ngay, không phải mở app hai lần
