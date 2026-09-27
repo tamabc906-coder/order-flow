@@ -156,3 +156,10 @@ section.tab.on{display:block}
   table.fp td.bar{width:24%}
   .list{grid-template-columns:minmax(0,1fr)}
 }
+/* mẫu màu trong chú giải (27/09/2026) */
+i.sw{display:inline-block;width:16px;height:5px;border-radius:2px;vertical-align:middle;margin-right:4px}
+i.sw.ring{height:4px;box-shadow:0 0 0 2px #0B1628,0 0 0 3px rgba(255,255,255,.15)}
+i.sw.dash{height:0;border-top:2px dashed;background:none}
+ol.plain{margin:6px 0 0;padding-left:20px;font-size:13px}
+ol.plain li{margin:6px 0}
+.hint.ex{margin-top:10px;color:var(--ink)}

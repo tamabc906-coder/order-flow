@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=5">
+<link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 <header class="top">
@@ -85,13 +85,29 @@
     </div>
     <div class="card">
       <h3><span class="num">2</span>Footprint cá mập</h3>
-      <p class="hint">Cùng cột phiên và trục giá với biểu đồ trên, nhưng chỉ tính <b>lệnh cá mập</b>: lệnh gộp cùng giây, cùng giá,
-        cùng chiều có giá trị từ 500 triệu đồng. Đỏ sang trái là cá mập bán chủ động, xanh sang phải là cá mập mua chủ động.
-        Thanh dùng <b>thang riêng</b> (lệnh cá mập lớn nhất trong khung dài bằng nửa cột), nên không so độ dài với biểu đồ trên được.
-        Vạch xanh ngắn bên phải là <b>giá mua bình quân của cá mập</b> trong phiên (VWAP chỉ lệnh lớn), vạch đỏ bên trái là giá bán bình quân;
-        đường vàng nét đứt là <b>giá vốn cá mập mua</b> cộng dồn từ phiên đầu khung đang xem.
-        Hàng dưới là delta cá mập = mua lớn − bán lớn (triệu cp) và tỷ lệ KL cá mập trong KL chủ động của phiên.</p>
+      <p class="hint">Chỉ tính lệnh của <b>cá mập</b> (mỗi lệnh từ 500 triệu đồng trở lên). Cột và giá thẳng hàng với biểu đồ trên.</p>
       <div id="m-whale"></div>
+      <h4 class="gh">Mỗi hình nghĩa là gì</h4>
+      <dl class="defs">
+        <dt><i class="sw" style="background:var(--sell)"></i> Thanh đỏ ←</dt><dd>Cá mập <b>bán</b> ở giá này. <span>Thanh càng dài, bán càng nhiều.</span></dd>
+        <dt><i class="sw" style="background:var(--buy)"></i> Thanh xanh →</dt><dd>Cá mập <b>mua</b> ở giá này.</dd>
+        <dt><i class="sw ring" style="background:#9BF2C2"></i> Vạch xanh nhạt</dt><dd><b>Giá mua trung bình</b> của cá mập hôm đó.</dd>
+        <dt><i class="sw ring" style="background:#FF9C9C"></i> Vạch đỏ nhạt</dt><dd><b>Giá bán trung bình</b> của cá mập hôm đó.</dd>
+        <dt><i class="sw dash" style="border-color:var(--gold2)"></i> Đường vàng</dt><dd><b>Giá vốn của cá mập</b>, tính từ phiên đầu tiên trên biểu đồ. <span>Con số ở cuối đường.</span></dd>
+        <dt><i class="sw" style="background:var(--ink)"></i> Vạch trắng</dt><dd>Giá đóng cửa.</dd>
+        <dt>Cột dưới cùng</dt><dd>Cá mập <b>mua ròng</b> (xanh, lên) hay <b>bán ròng</b> (đỏ, xuống) bao nhiêu triệu cổ phiếu.
+          <span>"CM 70 % KL" = cá mập chiếm 70 % giao dịch chủ động hôm đó.</span></dd>
+      </dl>
+      <h4 class="gh">Đọc nhanh 3 bước</h4>
+      <ol class="plain">
+        <li><b>Nhìn cột dưới cùng:</b> xanh là cá mập đang <b>gom</b>, đỏ là cá mập đang <b>xả</b>. Nhiều phiên xanh liền nhau là tín hiệu gom rõ.</li>
+        <li><b>So giá đóng cửa với đường vàng:</b> giá <b>trên</b> đường vàng thì cá mập đang lãi, thường giữ hàng.
+          Giá <b>dưới</b> đường vàng thì cá mập đang lỗ, dễ bán cắt; hoặc họ sẽ đỡ giá quanh đường vàng.</li>
+        <li><b>Tìm thanh xanh dài nhất:</b> mức giá đó là nơi cá mập gom nhiều nhất, hay trở thành <b>vùng đỡ</b> khi giá quay lại.</li>
+      </ol>
+      <p class="hint ex"><b>Ví dụ VPB:</b> 25/09 cá mập mua ròng +9,95 triệu cổ phiếu. Giá vốn cá mập 6 phiên là 22,66,
+        giá đóng cửa 23,0 cao hơn, nên cá mập đang lãi khoảng 1,5 %.</p>
+      <p class="hint">Độ dài thanh ở đây không so với biểu đồ trên được, vì mỗi biểu đồ có thang riêng.</p>
     </div>
     <div class="card bronze">
       <h3><span class="num">3</span>Bảng theo phiên</h3>
