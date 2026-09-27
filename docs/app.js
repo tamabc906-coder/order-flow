@@ -421,6 +421,10 @@ async function renderDays() {
   const line = (a, stroke, dash) => el('path', {d: a.map((v, k) => (k ? 'L' : 'M') + (L2 + colW * (k + .5)).toFixed(1) + ' ' + sc(a, v).toFixed(1)).join(''),
     fill: 'none', stroke, 'stroke-width': 1.8, 'stroke-dasharray': dash || ''}, s2);
   line(cl, 'var(--ink)', '4 3'); line(cv, 'var(--gold2)');
+  Ds.forEach((d, k) => el('title', {}, el('circle', {cx: L2 + colW * (k + .5), cy: sc(cv, cv[k]), r: 3.5, fill: 'var(--gold2)'}, s2),
+    `${dd(d.d)} · delta ${smil(d.delta)} · CVD ${smil(cv[k])} · đóng ${px(d.close)}`));
+  const cn = cv.length - 1, cy = sc(cv, cv[cn]);
+  if (cn > 0) el('text', {x: W2 - R2, y: cy + (cy > yc0 + HCv / 2 ? -7 : 14), 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:600'}, s2, smil(cv[cn]));
   el('text', {x: L2 - 4, y: yc0 + 8, 'text-anchor': 'end'}, s2, 'CVD');
   el('text', {x: W2 - R2, y: yc0 - 4, 'text-anchor': 'end'}, s2, W2 < 500 ? '— CVD   - - giá' : '— CVD (vàng)   - - giá đóng cửa (mỗi đường một thang riêng)');
 
