@@ -95,12 +95,14 @@
         <dt><i class="sw ring" style="background:#FF9C9C"></i> Vạch đỏ nhạt</dt><dd><b>Giá bán trung bình</b> của cá mập hôm đó.</dd>
         <dt><i class="sw dash" style="border-color:var(--gold2)"></i> Đường vàng</dt><dd><b>Giá vốn của cá mập</b>, tính từ phiên đầu tiên trên biểu đồ. <span>Con số ở cuối đường.</span></dd>
         <dt><i class="sw" style="background:var(--ink)"></i> Vạch trắng</dt><dd>Giá đóng cửa.</dd>
-        <dt>Cột dưới cùng</dt><dd>Cá mập <b>mua ròng</b> (xanh, lên) hay <b>bán ròng</b> (đỏ, xuống) bao nhiêu triệu cổ phiếu.
+        <dt>Cột Delta cá mập</dt><dd>Cá mập <b>mua ròng</b> (xanh, lên) hay <b>bán ròng</b> (đỏ, xuống) bao nhiêu triệu cổ phiếu.
           <span>"CM 70 % KL" = cá mập chiếm 70 % giao dịch chủ động hôm đó.</span></dd>
+        <dt><i class="sw" style="background:var(--gold2)"></i> Đường vàng dưới cùng</dt><dd><b>CVD cá mập</b>: cộng dồn mua ròng của cá mập từ phiên đầu biểu đồ. <span>Đi lên = cá mập gom dần, đi xuống = cá mập xả dần. Con số ở cuối đường.</span></dd>
+        <dt><i class="sw dash" style="border-color:var(--ink)"></i> Đường trắng đứt</dt><dd>Giá đóng cửa. <span>Mỗi đường một thang riêng: chỉ so hướng đi, không so chỗ hai đường cắt nhau.</span></dd>
       </dl>
       <h4 class="gh">Đọc nhanh 3 bước</h4>
       <ol class="plain">
-        <li><b>Nhìn cột dưới cùng:</b> xanh là cá mập đang <b>gom</b>, đỏ là cá mập đang <b>xả</b>. Nhiều phiên xanh liền nhau là tín hiệu gom rõ.</li>
+        <li><b>Nhìn cột Delta cá mập:</b> xanh là cá mập đang <b>gom</b>, đỏ là cá mập đang <b>xả</b>. Nhiều phiên xanh liền nhau là tín hiệu gom rõ.</li>
         <li><b>So giá đóng cửa với đường vàng:</b> giá <b>trên</b> đường vàng thì cá mập đang lãi, thường giữ hàng.
           Giá <b>dưới</b> đường vàng thì cá mập đang lỗ, dễ bán cắt; hoặc họ sẽ đỡ giá quanh đường vàng.</li>
         <li><b>Tìm thanh xanh dài nhất:</b> mức giá đó là nơi cá mập gom nhiều nhất, hay trở thành <b>vùng đỡ</b> khi giá quay lại.</li>
@@ -206,7 +208,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 <script>
 if ('serviceWorker' in navigator) {
   // Bản mới tiếp quản (skipWaiting + claim) → tải lại một lần để thấy ngay, không phải mở app hai lần

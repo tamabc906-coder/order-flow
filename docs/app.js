@@ -444,11 +444,11 @@ function drawWhale(Ds, g) {
   const host = $('m-whale');
   host.innerHTML = '';
   const {W2, L2, R2, H1, lo, hi, colW, half} = g;
-  const y10 = 10, HDl = 56, G = 18, yd0 = y10 + H1 + G + 12, H2 = yd0 + HDl + 22;
+  const y10 = 10, HDl = 56, HCv = 60, G = 18, yd0 = y10 + H1 + G + 12, yc0 = yd0 + HDl + 22 + G + 8, H2 = yc0 + HCv + 10;
   const y = p => y10 + (hi - p) / (hi - lo) * H1;
   let mx = 1;
   for (const d of Ds) for (const [, s, b] of d.blv || []) mx = Math.max(mx, s, b);
-  const s2 = el('svg', {viewBox: `0 0 ${W2} ${H2}`, role: 'img', 'aria-label': 'Footprint cá mập theo phiên và delta cá mập'}, host);
+  const s2 = el('svg', {viewBox: `0 0 ${W2} ${H2}`, role: 'img', 'aria-label': 'Footprint cá mập theo phiên, delta cá mập và CVD cá mập'}, host);
   const r = hi - lo, st = r > 20 ? 5 : r > 6 ? 2 : r > 3 ? 1 : r > 1.2 ? .5 : .2;
   for (let p = Math.ceil(lo / st) * st; p <= hi; p += st) {
     el('line', {x1: L2, x2: W2 - R2, y1: y(p), y2: y(p), stroke: 'var(--grid)'}, s2);
@@ -506,9 +506,28 @@ function drawWhale(Ds, g) {
       fill: v >= 0 ? 'var(--buy)' : 'var(--sell)', rx: 1}, s2);
     if (colW > 28) el('text', {x: cx, y: v >= 0 ? ydl(v) - 3 : ydl(v) + 10, 'text-anchor': 'middle'}, s2, smil(v).replace(' tr', ''));
     const act = (d.buy || 0) + (d.sell || 0);
-    if (colW > 40 && act && d.bb != null) el('text', {x: cx, y: H2 - 4, 'text-anchor': 'middle', style: 'fill:var(--mute)'}, s2,
+    if (colW > 40 && act && d.bb != null) el('text', {x: cx, y: yd0 + HDl + 18, 'text-anchor': 'middle', style: 'fill:var(--mute)'}, s2,
       `CM ${Math.round((d.bb + d.bs) / act * 100)} % KL`);
   });
+  // CVD cá mập = cộng dồn delta cá mập từ phiên đầu khung (cùng mốc với đường giá vốn CM); vẽ như hàng CVD của bảng ①
+  el('text', {x: L2 - 4, y: yc0 + 8, 'text-anchor': 'end'}, s2, 'CVD');
+  el('text', {x: L2 - 4, y: yc0 + 19, 'text-anchor': 'end'}, s2, 'cá mập');
+  if (Ds.length < 2) {
+    el('text', {x: (L2 + W2 - R2) / 2, y: yc0 + HCv / 2, 'text-anchor': 'middle', style: 'fill:var(--mute)'}, s2, 'cần ≥ 2 phiên');
+    return;
+  }
+  let acc = 0;
+  const cv = Ds.map(d => (acc += d.big || 0)), cl = Ds.map(d => d.close);
+  const sc = (a, v) => { const l = Math.min(...a), h = Math.max(...a); return yc0 + HCv - (h > l ? (v - l) / (h - l) : .5) * HCv; };
+  const xk = k => L2 + colW * (k + .5);
+  const line = (a, stroke, dash) => el('path', {d: a.map((v, k) => (k ? 'L' : 'M') + xk(k).toFixed(1) + ' ' + sc(a, v).toFixed(1)).join(''),
+    fill: 'none', stroke, 'stroke-width': 1.8, 'stroke-dasharray': dash || ''}, s2);
+  line(cl, 'var(--ink)', '4 3'); line(cv, 'var(--gold2)');
+  Ds.forEach((d, k) => el('title', {}, el('circle', {cx: xk(k), cy: sc(cv, cv[k]), r: 3.5, fill: 'var(--gold2)'}, s2),
+    `${dd(d.d)} · delta CM ${smil(d.big || 0)} · CVD CM ${smil(cv[k])} · đóng ${px(d.close)}`));
+  const n = cv.length - 1;
+  el('text', {x: W2 - R2, y: sc(cv, cv[n]) + (sc(cv, cv[n]) > yc0 + HCv / 2 ? -7 : 14), 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:600'}, s2, smil(cv[n]));
+  el('text', {x: W2 - R2, y: yc0 - 4, 'text-anchor': 'end'}, s2, W2 < 500 ? '— CVD CM   - - giá' : '— CVD cá mập (vàng)   - - giá đóng cửa (mỗi đường một thang riêng)');
 }
 
 // ---------------------------------------------------------------- ④ Hướng dẫn
