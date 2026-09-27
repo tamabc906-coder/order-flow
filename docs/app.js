@@ -423,8 +423,8 @@ async function renderDays() {
   line(cl, 'var(--ink)', '4 3'); line(cv, 'var(--gold2)');
   Ds.forEach((d, k) => el('title', {}, el('circle', {cx: L2 + colW * (k + .5), cy: sc(cv, cv[k]), r: 3.5, fill: 'var(--gold2)'}, s2),
     `${dd(d.d)} · delta ${smil(d.delta)} · CVD ${smil(cv[k])} · đóng ${px(d.close)}`));
-  const cn = cv.length - 1, cy = sc(cv, cv[cn]);
-  if (cn > 0) el('text', {x: W2 - R2, y: cy + (cy > yc0 + HCv / 2 ? -7 : 14), 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:600'}, s2, smil(cv[cn]));
+  if (colW > 28) cv.forEach((v, k) => { const cy = sc(cv, v);
+    el('text', {x: L2 + colW * (k + .5), y: cy + (cy > yc0 + HCv / 2 ? -7 : 14), 'text-anchor': 'middle', style: 'fill:var(--gold2);font-weight:600;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s2, smil(v).replace(' tr', '')); });
   el('text', {x: L2 - 4, y: yc0 + 8, 'text-anchor': 'end'}, s2, 'CVD');
   el('text', {x: W2 - R2, y: yc0 - 4, 'text-anchor': 'end'}, s2, W2 < 500 ? '— CVD   - - giá' : '— CVD (vàng)   - - giá đóng cửa (mỗi đường một thang riêng)');
 
@@ -529,8 +529,8 @@ function drawWhale(Ds, g) {
   line(cl, 'var(--ink)', '4 3'); line(cv, 'var(--gold2)');
   Ds.forEach((d, k) => el('title', {}, el('circle', {cx: xk(k), cy: sc(cv, cv[k]), r: 3.5, fill: 'var(--gold2)'}, s2),
     `${dd(d.d)} · delta CM ${smil(d.big || 0)} · CVD CM ${smil(cv[k])} · đóng ${px(d.close)}`));
-  const n = cv.length - 1;
-  el('text', {x: W2 - R2, y: sc(cv, cv[n]) + (sc(cv, cv[n]) > yc0 + HCv / 2 ? -7 : 14), 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:600'}, s2, smil(cv[n]));
+  if (colW > 28) cv.forEach((v, k) => { const cy = sc(cv, v);
+    el('text', {x: xk(k), y: cy + (cy > yc0 + HCv / 2 ? -7 : 14), 'text-anchor': 'middle', style: 'fill:var(--gold2);font-weight:600;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s2, smil(v).replace(' tr', '')); });
   el('text', {x: W2 - R2, y: yc0 - 4, 'text-anchor': 'end'}, s2, W2 < 500 ? '— CVD CM   - - giá' : '— CVD cá mập (vàng)   - - giá đóng cửa (mỗi đường một thang riêng)');
 }
 
