@@ -2,8 +2,8 @@
 // dùng bản cũ. Push điện thoại làm giai đoạn sau. Đổi CACHE khi đổi ?v= trong index.html.
 // Bẫy 26/09/2026: addAll() mặc định lấy qua bộ đệm HTTP (GitHub Pages max-age=600) → bản v4 bị nhét index.html
 // cũ và trang lấy từ cache trước nên kẹt mãi. Vì vậy: cài bằng cache:'reload', điều hướng (HTML) đi mạng trước.
-const CACHE = 'of-shell-v6';
-const SHELL = ['./', './index.html', './styles.css?v=5', './app.js?v=6', './manifest.webmanifest', './icons/icon-192.png'];
+const CACHE = 'of-shell-v7';
+const SHELL = ['./', './index.html', './styles.css?v=5', './app.js?v=7', './manifest.webmanifest', './icons/icon-192.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE)

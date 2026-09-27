@@ -438,6 +438,8 @@ async function renderDays() {
 
 // Footprint cá mập (27/09/2026): cùng cột phiên + trục giá với footprint trên (g = hình học của nó), chỉ lệnh ≥ 500 tr đ.
 // d.blv = [[giá, bán_lớn, mua_lớn]] đã quy giá điều chỉnh; d.blv_ok = false khi phiên chưa lưu cá mập theo mức giá.
+// giá bình quân theo KL của cột i trong blv ([giá, bán_lớn, mua_lớn]): i = 2 mua, 1 bán
+const wv = (blv, i) => { let pv = 0, v = 0; for (const r of blv || []) { pv += r[0] * r[i]; v += r[i]; } return v ? pv / v : null; };
 function drawWhale(Ds, g) {
   const host = $('m-whale');
   host.innerHTML = '';
@@ -470,7 +472,29 @@ function drawWhale(Ds, g) {
     }
     if (!d.blv.length) el('text', {x: cx, y: y10 + H1 / 2, 'text-anchor': 'middle', style: 'fill:var(--mute)'}, s2, 'không có');
     el('line', {x1: cx - half, x2: cx + half, y1: y(d.close), y2: y(d.close), stroke: 'var(--ink)', 'stroke-width': 1.2, opacity: .7}, s2);
+    // VWAP cá mập = giá vốn bình quân: mua (vạch xanh, bên phải) và bán (vạch đỏ, bên trái)
+    const vb = wv(d.blv, 2), vs = wv(d.blv, 1);
+    // viền tối + màu sáng hơn thanh để vạch không chìm vào chính các thanh KL
+    const tick = (x1, x2, v, col, tip) => {
+      el('line', {x1, x2, y1: y(v), y2: y(v), stroke: '#0B1628', 'stroke-width': 5.5, 'stroke-linecap': 'round'}, s2);
+      el('title', {}, el('line', {x1, x2, y1: y(v), y2: y(v), stroke: col, 'stroke-width': 2.6, 'stroke-linecap': 'round'}, s2), tip);
+    };
+    if (vb != null) tick(cx + half * .15, cx + half, vb, '#9BF2C2', `${dd(d.d)}: cá mập mua bình quân ${px(+vb.toFixed(2))} · đóng cửa ${vsp(d.close, vb)}`);
+    if (vs != null) tick(cx - half, cx - half * .15, vs, '#FF9C9C', `${dd(d.d)}: cá mập bán bình quân ${px(+vs.toFixed(2))}`);
   });
+  // Giá vốn cá mập mua cộng dồn từ phiên đầu khung (AVWAP chỉ lệnh lớn), bỏ phiên chưa có blv
+  let apv = 0, av = 0;
+  const AV = Ds.map((d, k) => {
+    if (d.blv_ok !== false) for (const [p, , b] of d.blv || []) { apv += p * b; av += b; }
+    return [k, av ? apv / av : null];
+  }).filter(([, v]) => v != null);
+  if (AV.length > 1) {
+    el('path', {d: AV.map(([k, v], j) => (j ? 'L' : 'M') + (L2 + colW * (k + .5)).toFixed(1) + ' ' + y(v).toFixed(1)).join(''),
+      fill: 'none', stroke: 'var(--gold2)', 'stroke-width': 1.6, 'stroke-dasharray': '5 3'}, s2);
+    const [lk, lv] = AV[AV.length - 1];
+    el('text', {x: L2 + colW * (lk + .5), y: y(lv) - 5, 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:600'}, s2,
+      `Giá vốn CM ${AV.length} phiên ${px(+lv.toFixed(2))}`);
+  }
   const md = Math.max(1, ...Ds.map(d => Math.abs(d.big || 0)));
   const ydl = v => yd0 + HDl / 2 - v / md * HDl / 2;
   el('text', {x: L2 - 4, y: yd0 + 4, 'text-anchor': 'end'}, s2, 'Delta');
