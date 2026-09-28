@@ -1,5 +1,5 @@
 {
- "run_at": "2026-09-27T11:14:56+07:00",
+ "run_at": "2026-09-28T12:03:17+07:00",
  "day": "2026-09-25",
  "symbols": 39,
  "built": 39,
@@ -8,7 +8,10 @@
  "gaps": {
   "DCM": 5300
  },
- "new": [
+ "partial": 39,
+ "new": [],
+ "failed": {},
+ "unsettled": [
   "ACB",
   "AGR",
   "BID",
@@ -41,6 +44,7 @@
   "SZC",
   "TCB",
   "TCH",
+  "TPB",
   "VCB",
   "VCI",
   "VDS",
@@ -48,9 +52,5 @@
   "VIX",
   "VPB"
  ],
- "failed": {
-  "TPB": "TPB/p1: The read operation timed out"
- },
- "unsettled": [],
  "vndirect_last_error": ""
 }
