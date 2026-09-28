@@ -46,8 +46,10 @@ async function getJSON(path) {
   p.catch(() => cache.delete(path));
   return p;
 }
-let LATEST = null, STATE = null;
-const S = {tab: 'list', sym: null, day: null, sort: 'rel'};
+// LIVE = phiên hôm nay dở dang (lượt 12:05, data/live.json) — chỉ có từ trưa tới khi job 16:00 đưa phiên đủ vào kho
+let LATEST = null, STATE = null, LIVE = null;
+const S = {tab: 'list', sym: null, day: null, sort: 'rel', src: 'full'};
+const LIVE_DAY = 'sang';   // mã ngày trong hash cho phiên dở dang
 // Khung nến trong phiên: mặc định 15' (5' nhiều mã chỉ có 2 mức giá/nến — đo 26/09/2026), 5' để phóng to, 30' = kỳ Market Profile.
 const TFS = [5, 15, 30];
 let TF = 15;
@@ -114,13 +116,16 @@ function spark(cv) {
 }
 
 function renderList() {
-  const L = LATEST, it = L.items;
+  const live = S.src === 'live' && LIVE, L = live ? LIVE : LATEST, it = L.items;
+  $('l-src').innerHTML = LIVE ? [['live', `Sáng nay ${dd(LIVE.day)} · tới ${LIVE.upto}`], ['full', `Phiên đủ ${dd(LATEST.day || '----------')}`]]
+    .map(([k, n]) => `<button class="chip ${S.src === k ? 'on' : ''}" data-k="${k}" aria-pressed="${S.src === k}">${n}</button>`).join('') : '';
+  $('l-src').querySelectorAll('.chip').forEach(b => b.onclick = () => { S.src = b.dataset.k; renderList(); });
   const today = it.filter(r => r.day === L.day);
   const med = a => { const s = a.filter(v => v != null).sort((x, y) => x - y); return s.length ? s[s.length >> 1] : null; };
   const up = today.filter(r => (r.rel ?? 0) > 0).length;
   const bigNet = today.reduce((s, r) => s + r.big, 0);
   const tiles = [
-    ['Phiên', dd(L.day || '----------'), (L.day || '').slice(0, 4), ''],
+    ['Phiên', dd(L.day || '----------'), live ? `dở dang · tới ${L.upto}` : (L.day || '').slice(0, 4), live ? 'vw' : ''],
     ['Số mã', `${today.length}/${it.length}`, 'có dữ liệu phiên này', ''],
     ['Mua CĐ trung vị', pct(med(today.map(r => r.share))), 'cả danh mục', ''],
     ['Mua mạnh hơn TB', `${up}/${today.length}`, 'mã có so TB > 0', up * 2 >= today.length ? 'pos' : 'neg'],
@@ -137,7 +142,7 @@ function renderList() {
   });
   const [, name, cmp] = SORTS.find(s => s[0] === S.sort);
   const rows = [...it].sort((a, b) => sortDesc ? cmp(b, a) : cmp(a, b));
-  $('l-title').textContent = `Danh mục · xếp theo ${name} · dấu hiệu khung 15'`;
+  $('l-title').textContent = `Danh mục${live ? ' · PHIÊN SÁNG (chưa xong)' : ''} · xếp theo ${name} · dấu hiệu khung 15'`;
   $('l-list').innerHTML = rows.map(r => {
     const sigs = Object.entries(r.sig).sort().map(([k, n]) => `<span style="color:${SIG[k].c}" title="${SIG[k].name}">${SIG[k].s}${n > 1 ? n : ''}</span>`).join(' ');
     const stale = r.day !== L.day ? `<span class="tag">phiên ${dd(r.day)}</span>` : '';
@@ -156,7 +161,7 @@ function renderList() {
       </div></div>`;
   }).join('') || '<p class="empty">Chưa có dữ liệu.</p>';
   $('l-list').querySelectorAll('.row').forEach(d => {
-    const open = () => go('day', d.dataset.sym);
+    const open = () => go('day', d.dataset.sym, live ? LIVE_DAY : null);
     d.onclick = open;
     d.onkeydown = e => { if (e.key === 'Enter') open(); };
   });
@@ -170,6 +175,7 @@ async function renderDay(wantDay) {
   let daily;
   try { daily = await getJSON(`daily/${S.sym}.json`); } catch (e) { $('d-chart').innerHTML = '<p class="empty">Không tải được dữ liệu mã này.</p>'; return; }
   const days = daily.days.filter(d => d.intraday).map(d => d.d).reverse();
+  if (LIVE && LIVE.items.some(r => r.sym === S.sym)) days.unshift(LIVE_DAY);
   if (!days.length) {
     $('d-date').innerHTML = ''; $('d-tiles').innerHTML = ''; $('fp').innerHTML = ''; $('d-sigs').innerHTML = '';
     $('d-chart').innerHTML = '<p class="empty">Mã này chưa có phiên nào đủ tick để vẽ nến 5 phút.</p>';
@@ -177,23 +183,24 @@ async function renderDay(wantDay) {
   }
   const day = days.includes(wantDay) ? wantDay : days[0];
   S.day = day;
-  $('d-date').innerHTML = days.map(d => `<option value="${d}">Phiên ${dd(d)}/${d.slice(0, 4)}</option>`).join('');
+  $('d-date').innerHTML = days.map(d => d === LIVE_DAY ? `<option value="${d}">Sáng ${dd(LIVE.day)} (dở dang, tới ${LIVE.upto})</option>`
+    : `<option value="${d}">Phiên ${dd(d)}/${d.slice(0, 4)}</option>`).join('');
   $('d-date').value = day;
   $('d-date').onchange = () => go('day', S.sym, $('d-date').value);
-  try { D = await getJSON(`intraday/${day}/${S.sym}.json`); } catch (e) {
+  try { D = await getJSON(day === LIVE_DAY ? `live/${S.sym}.json` : `intraday/${day}/${S.sym}.json`); } catch (e) {
     $('d-chart').innerHTML = '<p class="empty">Phiên này đã quá 60 phiên hoặc chưa tải được.</p>'; return;
   }
-  $('d-pill').textContent = `${fmt(D.ticks)} tick · hụt ${fmt(D.gap)} cp`;
+  $('d-pill').textContent = (D.partial ? `PHIÊN SÁNG · tới ${D.upto} · ` : '') + `${fmt(D.ticks)} tick · hụt ${fmt(D.gap)} cp`;
   const T = D.tot, cont = T.buy + T.sell || 1;
   const tiles = [
     ['Mua chủ động', mil(T.buy), `${(T.buy / cont * 100).toFixed(0)} % khớp liên tục`, 'pos'],
     ['Bán chủ động', mil(T.sell), `${(T.sell / cont * 100).toFixed(0)} % khớp liên tục`, 'neg'],
     ['Delta phiên', smil(T.buy - T.sell), 'mua − bán chủ động', T.buy >= T.sell ? 'pos' : 'neg'],
-    ['ATO + ATC', (T.x / (D.total || 1) * 100).toFixed(0) + ' %', mil(T.x) + ', không tính delta', ''],
+    [D.partial ? 'ATO' : 'ATO + ATC', (T.x / (D.total || 1) * 100).toFixed(0) + ' %', mil(T.x) + ', không tính delta', ''],
     ['Lệnh lớn ròng', smil(T.bb - T.bs), 'lệnh ≥ 500 tr đ', T.bb >= T.bs ? 'pos' : 'neg'],
   ];
   const VW = T.vw || {}, lastBar = D.tf['5'].bars[D.tf['5'].bars.length - 1];
-  if (VW.cont) tiles.push(['VWAP phiên', px(VW.cont), `đóng cửa ${vsp(lastBar.c, VW.cont)} so VWAP` +
+  if (VW.cont) tiles.push(['VWAP phiên', px(VW.cont), `${D.partial ? 'giá cuối' : 'đóng cửa'} ${vsp(lastBar.c, VW.cont)} so VWAP` +
     (VW.all ? ` · gồm ATO/ATC ${px(VW.all)}` : ''), 'vw']);
   tiles.push(['Giá vốn cá mập', VW.bb || VW.bs ? `${VW.bb ? px(VW.bb) : '–'} / ${VW.bs ? px(VW.bs) : '–'}` : '–',
     VW.bb || VW.bs ? 'VWAP lệnh lớn mua / bán CĐ' : 'chưa có cho phiên này', '']);
@@ -546,6 +553,9 @@ function renderGuide() {
     Object.keys(s.gaps || {}).length ? `Nguồn thiếu tick lẻ: ${Object.entries(s.gaps).map(([k, v]) => `${k} ${fmt(v)} cp`).join(', ')}.` : 'Không mã nào thiếu tick.',
     (s.dnse_missing || []).length ? `<span class="bad">Không có nến DNSE (giá chưa quy điều chỉnh):</span> ${s.dnse_missing.join(', ')}` : 'Nến DNSE đủ cho mọi mã.',
     'Job chạy 16:00 các ngày giao dịch, dự phòng 16:30, 18:30 và 08:15 sáng hôm sau.',
+    'Lượt 12:05 (nghỉ trưa) gom phiên sáng để xem sớm: nút <b>Sáng nay</b> ở tab Danh mục và dòng "Sáng … (dở dang)" ở tab Trong phiên. ' +
+      'Phiên sáng không lưu kho, không vào tab Nhiều phiên; dấu hiệu và "so TB" có thể đổi khi đủ phiên. Job 16:00 thay bằng phiên đủ.' +
+      (LIVE ? ` Hiện có phiên sáng ${dd(LIVE.day)} của ${LIVE.items.length} mã, tới ${LIVE.upto}.` : ''),
   ];
   $('g-state').innerHTML = li.map(x => `<li>${x}</li>`).join('');
 }
@@ -553,7 +563,10 @@ function renderGuide() {
 // ---------------------------------------------------------------- khởi động
 (async function boot() {
   try {
-    [LATEST, STATE] = await Promise.all([getJSON('latest.json'), getJSON('state.json').catch(() => null)]);
+    [LATEST, STATE, LIVE] = await Promise.all([getJSON('latest.json'), getJSON('state.json').catch(() => null),
+      getJSON('live.json').catch(() => null)]);
+    if (LIVE && !(LIVE.day > (LATEST.day || ''))) LIVE = null;   // bản sáng cũ còn sót trong cache: phiên đủ đã có
+    if (LIVE) S.src = 'live';
   } catch (e) {
     document.querySelector('.wrap').innerHTML = '<p class="empty">Không tải được dữ liệu. Kiểm tra mạng rồi mở lại.</p>';
     return;

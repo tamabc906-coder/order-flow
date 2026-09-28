@@ -9,6 +9,9 @@ Chạy:
 VNDirect chỉ giữ PHIÊN GẦN NHẤT (tới ~09:00 hôm sau) → workflow chạy 16:00 + dự phòng 16:30, 18:30, 08:15 sáng sau.
 Idempotent theo (mã, ngày): đã có thì không ghi lại → cron dự phòng không đẻ commit rác.
 
+Lượt 12:05 (giờ nghỉ trưa): phiên hôm nay chưa xong → KHÔNG ghi kho (kho chỉ giữ phiên đủ), chỉ dựng bản xem sớm
+docs/data/live.json + live/<MÃ>.json. Khi phiên đủ vào kho (16:00) thì bản sáng tự bị gỡ.
+
 Mã thoát: 0 ổn · 1 có mã lỗi (ĐÃ ghi xong mọi thứ — workflow vẫn phải commit) · 2 không có danh mục.
 """
 from __future__ import annotations
@@ -36,6 +39,8 @@ DAILY_OUT = 40          # số phiên của file nhiều phiên mỗi mã
 DNSE_DAYS = 120         # ngày lịch nến DNSE để lấy hệ số điều chỉnh (phủ ≥ 40 phiên)
 SEED_TICKS = ROOT.parent / "order-flow-lab" / "ticks"
 SEED_ZONE = ROOT.parent / "price-path" / "data" / "zone"
+LIVE_DIR = SITE_DATA / "live"        # phiên hôm nay dở dang (lượt 12:05) — không bao giờ vào kho
+LIVE_IDX = SITE_DATA / "live.json"
 
 
 def dump(path: Path, obj, pretty: bool = False) -> None:
@@ -59,7 +64,7 @@ def has(sym: str, day: str) -> bool:
 # ---------------------------------------------------------------- thu thập
 def collect(items: list[dict], force: bool) -> dict:
     today = datetime.now(TZ).date().isoformat()
-    res = {"new": [], "have": [], "failed": {}, "unsettled": []}
+    res = {"new": [], "have": [], "failed": {}, "unsettled": [], "partial": {}}
     with vndirect.VndirectClient() as c:
         for it in items:
             sym = it["symbol"]
@@ -70,6 +75,10 @@ def collect(items: list[dict], force: bool) -> dict:
             day = ticks[-1]["date"]
             if not settled(ticks, today):
                 res["unsettled"].append(sym)
+                if day == today:  # phiên sáng: giữ trong bộ nhớ để dựng bản xem sớm, không ghi kho
+                    rec = session_record(ticks)
+                    rec["upto"] = ticks[-1]["time"][:5]
+                    res["partial"][sym] = rec
                 continue
             if has(sym, day) and not force:
                 res["have"].append(sym)
@@ -127,6 +136,51 @@ def intraday_doc(sym: str, ex: str, rec: dict, prev: dict | None, closes: dict) 
             "tf": tfs}
 
 
+def list_row(it: dict, dl: list[dict], doc: dict | None) -> dict:
+    """Một dòng tab Danh mục từ các phiên đã quy giá (dl) + file trong phiên của phiên cuối (doc)."""
+    last = dl[-1]
+    prev = dl[-2] if len(dl) > 1 else None
+    row = {"sym": it["symbol"], "name": it.get("company_name", ""), "ex": it.get("exchange") or "HOSE",
+           "day": last["d"], "close": last["close"],
+           "chg": round((last["close"] / prev["close"] - 1) * 100, 2) if prev else None,
+           "buy": last["buy"], "sell": last["sell"], "delta": last["delta"], "share": last["share"],
+           "rel": last["rel"], "big": last["big"], "gap": last["gap"], "sig": {}, "cvd": []}
+    if doc and doc["day"] == last["d"]:
+        view = doc["tf"][LIST_TF]
+        for s in view["sigs"]:
+            row["sig"][s["kind"]] = row["sig"].get(s["kind"], 0) + 1
+        row["cvd"] = [b["cvd"] for b in view["bars"] if not b["auction"]]
+        row["no_side"] = doc["no_side"]
+    return row
+
+
+def build_live(items: list[dict], closes: dict, partial: dict | None, day: str | None) -> int:
+    """Bản xem sớm phiên hôm nay dở dang. partial=None (--rebuild): giữ bản cũ nếu phiên đủ chưa vào kho.
+    Có lượt gom thật mà không có phiên dở dang (16:00, 08:15…) → gỡ bản sáng."""
+    if partial is None:
+        if LIVE_IDX.exists() and json.loads(LIVE_IDX.read_text(encoding="utf-8"))["day"] > (day or ""):
+            return 0
+    shutil.rmtree(LIVE_DIR, ignore_errors=True)
+    LIVE_IDX.unlink(missing_ok=True)
+    rows, upto = [], []
+    for it in items:
+        sym, ex = it["symbol"], it.get("exchange") or "HOSE"
+        rec = (partial or {}).get(sym)
+        if not rec or rec["date"] <= (day or ""):
+            continue
+        recs, cl = records(sym), closes.get(sym, {})
+        doc = intraday_doc(sym, ex, rec, recs[-1] if recs else None, cl)
+        doc.update(partial=True, upto=rec["upto"])
+        dump(LIVE_DIR / f"{sym}.json", doc)
+        # share/rel so với TB 20 phiên ĐỦ trước đó — share là tỷ lệ nên phiên sáng so được với phiên đủ
+        rows.append(list_row(it, daily.days(recs + [rec], cl, DAILY_OUT), doc))
+        upto.append(rec["upto"])
+    if rows:
+        dump(LIVE_IDX, {"generated": datetime.now(TZ).isoformat(timespec="seconds"), "day": rows[0]["day"],
+                        "upto": max(upto), "items": rows})
+    return len(rows)
+
+
 def build(items: list[dict], wl_source: str, run: dict | None) -> int:
     closes: dict[str, dict] = {}
     with dnse.DnseClient() as c:
@@ -152,19 +206,7 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
             dump(SITE_DATA / "intraday" / rec["date"] / f"{sym}.json", doc)
             dates.add(rec["date"])
             last_doc = doc
-        last = dl[-1]
-        prev = dl[-2] if len(dl) > 1 else None
-        row = {"sym": sym, "name": it.get("company_name", ""), "ex": ex, "day": last["d"], "close": last["close"],
-               "chg": round((last["close"] / prev["close"] - 1) * 100, 2) if prev else None,
-               "buy": last["buy"], "sell": last["sell"], "delta": last["delta"], "share": last["share"],
-               "rel": last["rel"], "big": last["big"], "gap": last["gap"], "sig": {}, "cvd": []}
-        if last_doc and last_doc["day"] == last["d"]:
-            view = last_doc["tf"][LIST_TF]
-            for s in view["sigs"]:
-                row["sig"][s["kind"]] = row["sig"].get(s["kind"], 0) + 1
-            row["cvd"] = [b["cvd"] for b in view["bars"] if not b["auction"]]
-            row["no_side"] = last_doc["no_side"]
-        rows.append(row)
+        rows.append(list_row(it, dl, last_doc))
 
     # dọn: phiên nến 5' ngoài cửa sổ, mã đã rời danh mục
     for d in (SITE_DATA / "intraday").glob("*"):
@@ -177,11 +219,13 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
 
     now = datetime.now(TZ).isoformat(timespec="seconds")
     day = max((r["day"] for r in rows), default=None)
+    n_live = build_live(items, closes, run["partial"] if run else None, day)
     dump(SITE_DATA / "latest.json", {"generated": now, "day": day, "dates": sorted(dates, reverse=True),
                                      "watchlist": wl_source, "items": rows})
     state = {"run_at": now, "day": day, "symbols": len(items), "built": len(rows), "watchlist": wl_source,
              "dnse_missing": sorted(s for s, c in closes.items() if not c),
-             "gaps": {r["sym"]: r["gap"] for r in rows if r["gap"] and r["day"] == day}}
+             "gaps": {r["sym"]: r["gap"] for r in rows if r["gap"] and r["day"] == day},
+             "partial": n_live}
     if run is not None:
         state.update({"new": run["new"], "failed": run["failed"], "unsettled": run["unsettled"],
                       "vndirect_last_error": vndirect.last_error})
@@ -191,7 +235,8 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
             prev = json.loads(old.read_text(encoding="utf-8"))
             state.update({k: prev[k] for k in ("new", "failed", "unsettled", "vndirect_last_error") if k in prev})
     dump(SITE_DATA / "state.json", state, pretty=True)
-    print(f"docs/data: {len(rows)} mã, phiên {day}, {len(dates)} phiên nến 5'")
+    print(f"docs/data: {len(rows)} mã, phiên {day}, {len(dates)} phiên nến 5'" +
+          (f" · phiên dở dang {n_live} mã" if n_live else ""))
     return 1 if run and run["failed"] else 0
 
 

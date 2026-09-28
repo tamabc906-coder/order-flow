@@ -2,10 +2,13 @@
 # Dự phòng 16:30, 18:30 VN nếu GitHub trễ/bỏ; và 08:15 VN sáng hôm sau (T3–T7) vì VNDirect chỉ giữ tick của
 # PHIÊN GẦN NHẤT — tới ~09:00 phiên mới bắt đầu là mất. Job idempotent theo (mã, ngày): lượt dự phòng không
 # có gì mới thì dữ liệu dựng lại giống hệt → không có diff → không commit.
+# 05:05 UTC = 12:05 VN (nghỉ trưa): phiên sáng dở dang → chỉ dựng docs/data/live (không ghi kho data/store);
+# lượt 16:00 đưa phiên đủ vào kho rồi tự gỡ bản sáng.
 name: daily
 
 on:
   schedule:
+    - cron: "5 5 * * 1-5"
     - cron: "0 9 * * 1-5"
     - cron: "30 9 * * 1-5"
     - cron: "30 11 * * 1-5"

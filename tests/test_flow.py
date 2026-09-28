@@ -171,3 +171,50 @@ def test_days_whale_footprint_from_zone_and_ticks():
     assert d[1]["blv"] == [[25.0, 0, 30000]] and (d[1]["bb"], d[1]["bs"]) == (30000, 0)
     o = daily.days([old], {})[0]
     assert o["blv_ok"] is False and o["blv"] == []
+
+
+# ---------------------------------------------------------------- lượt 12:05: phiên dở dang
+@pytest.fixture
+def job_dirs(tmp_path, monkeypatch):
+    from job import run_daily as rd
+    site = tmp_path / "site"
+    monkeypatch.setattr(rd, "STORE", tmp_path / "store")
+    monkeypatch.setattr(rd, "LIVE_DIR", site / "live")
+    monkeypatch.setattr(rd, "LIVE_IDX", site / "live.json")
+    return rd
+
+
+def morning(date):
+    return [tk("09:15:00", 10.0, 1000, "ATO", 1000, date), tk("10:00:00", 10.1, 500, "PS", 1500, date),
+            tk("11:29:40", 10.0, 300, "PB", 1800, date)]
+
+
+def test_collect_keeps_morning_out_of_store(job_dirs, monkeypatch):
+    rd = job_dirs
+    today = rd.datetime.now(rd.TZ).date().isoformat()
+
+    class Fake:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def latest_session(self, sym): return morning(today)
+
+    monkeypatch.setattr(rd.vndirect, "VndirectClient", Fake)
+    res = rd.collect([{"symbol": "AAA"}], force=False)
+    assert res["unsettled"] == ["AAA"] and res["partial"]["AAA"]["upto"] == "11:29"
+    assert not rd.STORE.exists()
+
+
+def test_live_built_then_removed_when_full_session_lands(job_dirs):
+    rd = job_dirs
+    items = [{"symbol": "AAA", "exchange": "HOSE"}]
+    rd.dump(rd.STORE / "AAA" / "2026-09-25.json", session_record(morning("2026-09-25")))
+    rec = session_record(morning("2026-09-28"))
+    rec["upto"] = "11:29"
+    assert rd.build_live(items, {}, {"AAA": rec}, "2026-09-25") == 1
+    idx = json.loads(rd.LIVE_IDX.read_text(encoding="utf-8"))
+    assert idx["day"] == "2026-09-28" and idx["upto"] == "11:29" and idx["items"][0]["delta"] == 200
+    doc = json.loads((rd.LIVE_DIR / "AAA.json").read_text(encoding="utf-8"))
+    assert doc["partial"] and doc["ref"] == 10.0
+    assert rd.build_live(items, {}, None, "2026-09-25") == 0 and rd.LIVE_IDX.exists()   # --rebuild giữa trưa: giữ
+    assert rd.build_live(items, {}, {}, "2026-09-28") == 0                               # 16:00: phiên đủ đã vào kho
+    assert not rd.LIVE_IDX.exists() and not rd.LIVE_DIR.exists()
