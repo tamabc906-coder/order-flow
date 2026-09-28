@@ -675,10 +675,11 @@ function erVerdict(m) {
   const c = k === 'okb' || k === 'oks' ? 'v-ok' : k === 'absb' || k === 'abss' ? 'v-bad' : 'v-mid';
   const f = m.rows[0], l = m.rows[m.rows.length - 1];
   $('e-verdict').innerHTML =
-    `<b>${S.sym}</b> · ${m.n} phiên (${dd(f.d)} → ${dd(l.d)}${l.live ? ' sáng' : ''}): cá mập ${m.SE >= 0 ? 'mua' : 'bán'} ròng <b>${erp(Math.abs(m.SE)).replace(/^\+/, '')}</b> KL/phiên TB, giá <b>${erp(m.SR)}</b>.<br>` +
+    // m.n = số phiên so sánh (phiên đầu chỉ làm mốc giá); m.rows.length = số phiên thật của khung
+    `<b>${S.sym}</b> · ${m.rows.length} phiên (${dd(f.d)} → ${dd(l.d)}${l.live ? ' sáng' : ''}, phiên ${dd(f.d)} làm mốc): cá mập ${m.SE >= 0 ? 'mua' : 'bán'} ròng <b>${erp(Math.abs(m.SE)).replace(/^\+/, '')}</b> KL/phiên TB, giá <b>${erp(m.SR)}</b>.<br>` +
     `<span class="${c}">${txt}.</span> ` + (m.eff != null ? `Hiệu suất ${ers(m.eff)} % giá cho mỗi 1 % KL mua ròng. ` : '') +
-    `Đồng pha ${m.dong}/${m.n} phiên, lệch pha ${m.lech}/${m.n}. ` +
-    (m.n >= 10 ? `Tương quan từng phiên ρ = ${ers(m.rho)}, độ dốc β = ${ers(m.beta)}.` : `<span class="hint">Tương quan và độ dốc cần ≥ 10 phiên (đang có ${m.n}).</span>`);
+    `Đồng pha ${m.dong}/${m.n} phiên so sánh, lệch pha ${m.lech}/${m.n}. ` +
+    (m.n >= 10 ? `Tương quan từng phiên ρ = ${ers(m.rho)}, độ dốc β = ${ers(m.beta)}.` : `<span class="hint">Tương quan và độ dốc cần ≥ 10 phiên so sánh (đang có ${m.n}).</span>`);
 }
 
 function erTraj(m) {
