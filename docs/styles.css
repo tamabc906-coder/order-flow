@@ -163,3 +163,17 @@ i.sw.dash{height:0;border-top:2px dashed;background:none}
 ol.plain{margin:6px 0 0;padding-left:20px;font-size:13px}
 ol.plain li{margin:6px 0}
 .hint.ex{margin-top:10px;color:var(--ink)}
+
+/* ---------- ⑤ NL & KQ (28/09/2026) ---------- */
+.er-ctl{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+.er-ctl label{color:var(--mute);font-size:12.5px;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.er-ctl input[type=range]{accent-color:var(--gold);width:110px}
+.er-ctl b{color:var(--gold2);min-width:38px}
+.er-verdict{font-size:14.5px;line-height:1.6;margin-top:4px}
+.er-verdict .v-ok{color:var(--buy);font-weight:700} .er-verdict .v-bad{color:var(--sell);font-weight:700} .er-verdict .v-mid{color:var(--warn);font-weight:700}
+.er-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--mute);margin-top:8px}
+.er-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.er-tbl th{cursor:pointer;user-select:none}
+.er-tbl th:nth-child(5),.er-tbl td:nth-child(5){text-align:left}
+.er-tbl tr.er-row{cursor:pointer} .er-tbl tr.er-row:hover td{background:rgba(212,175,106,.07)} .er-tbl tr.cur td{background:var(--sel)}
+.er-chip{display:inline-block;padding:0 7px;border-radius:99px;font-size:11px;color:#0B1628;font-weight:700}

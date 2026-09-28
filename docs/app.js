@@ -59,7 +59,7 @@ const LS = {get(k) { try { return localStorage.getItem(k); } catch (e) { return 
 // ---------------------------------------------------------------- điều hướng
 function parseHash() {
   const [tab, sym, day] = location.hash.replace(/^#/, '').split('/');
-  return {tab: ['list', 'day', 'days', 'guide'].includes(tab) ? tab : 'list', sym: sym || null, day: day || null};
+  return {tab: ['list', 'day', 'days', 'nlkq', 'guide'].includes(tab) ? tab : 'list', sym: sym || null, day: day || null};
 }
 function go(tab, sym, day) {
   const h = '#' + [tab, sym, day].filter(Boolean).join('/');
@@ -74,7 +74,7 @@ async function route() {
   document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === 't-' + S.tab));
   document.querySelectorAll('nav.tabs a').forEach(a => {
     a.classList.toggle('on', a.dataset.tab === S.tab);
-    a.href = '#' + a.dataset.tab + (S.sym && (a.dataset.tab === 'day' || a.dataset.tab === 'days') ? '/' + S.sym : '');
+    a.href = '#' + a.dataset.tab + (S.sym && (a.dataset.tab === 'day' || a.dataset.tab === 'days' || a.dataset.tab === 'nlkq') ? '/' + S.sym : '');
   });
   if (S.sym) LS.set('of.sym', S.sym);
   scrollTo(0, 0);
@@ -82,6 +82,7 @@ async function route() {
     if (S.tab === 'list') renderList();
     else if (S.tab === 'day') await renderDay(h.day);
     else if (S.tab === 'days') await renderDays();
+    else if (S.tab === 'nlkq') await renderNLKQ();
     else renderGuide();
   } catch (e) {
     console.error(e);
@@ -551,6 +552,241 @@ function drawWhale(Ds, g) {
   el('text', {x: W2 - R2, y: yc0 - 4, 'text-anchor': 'end'}, s2, W2 < 500 ? '— CVD CM   - - giá' : '— CVD cá mập (vàng)   - - giá đóng cửa (mỗi đường một thang riêng)');
 }
 
+// ---------------------------------------------------------------- ⑤ NL & KQ
+// Nỗ lực – kết quả của cá mập (28/09/2026, từ bản mẫu effort-result-lab người dùng duyệt). Chỉ mô tả, không phải tín hiệu.
+// Nỗ lực E = big / KL chủ động TB/phiên của khung × 100; kết quả R = % giá đóng cửa; phiên đầu khung chỉ làm mốc.
+const ER_CLS = {
+  okb: ['Nỗ lực mua có kết quả', 'var(--buy)'],
+  absb: ['Cầu CM bị hấp thụ', 'var(--warn)'],
+  oks: ['Xả có kết quả', 'var(--sell)'],
+  abss: ['Cung CM bị đỡ', 'var(--vwap)'],
+  free: ['Giá chạy không cần CM', '#8FA3BF'],
+  quiet: ['Im lặng', 'rgba(169,180,200,.28)'],
+};
+const ER = {te: +LS.get('of.er.te') || 3, tr: +LS.get('of.er.tr') || .5, scale: 'one', sort: 'lech', desc: true};
+let ER_DATA = null, ER_M = {}, ER_MISS = 0;   // ER_MISS = số mã tải lỗi → lần mở tab sau tải lại
+// số % có dấu, 2 chữ số lẻ (1 khi ≥ 10)
+const ers = v => {
+  if (v == null || !isFinite(v)) return '–';
+  if (Math.abs(v) < .005) return '0,00';
+  const k = Math.abs(v) >= 10 ? 1 : 2;
+  return (v > 0 ? '+' : '−') + Math.abs(v).toLocaleString('vi-VN', {minimumFractionDigits: k, maximumFractionDigits: k});
+};
+const erp = v => ers(v) + ' %';
+
+function erClassify(E, R) {
+  const bigE = Math.abs(E) >= ER.te;
+  if (bigE && E > 0) return R >= ER.tr ? 'okb' : 'absb';
+  if (bigE && E < 0) return R <= -ER.tr ? 'oks' : 'abss';
+  return Math.abs(R) >= ER.tr ? 'free' : 'quiet';
+}
+
+function erMetrics(days) {
+  const adv = days.reduce((a, d) => a + (d.buy || 0) + (d.sell || 0), 0) / days.length || 1;
+  const c0 = days[0].close;
+  let se = 0;
+  const rows = days.map((d, i) => {
+    const E = (d.big || 0) / adv * 100, R = i ? (d.close / days[i - 1].close - 1) * 100 : null;
+    if (i) se += E;
+    return {d: d.d, live: !!d.live, close: d.close, big: d.big || 0, E, R, SE: se, SR: (d.close / c0 - 1) * 100, cls: i ? erClassify(E, R) : null};
+  });
+  const rr = rows.slice(1), n = rr.length, SE = rows[rows.length - 1].SE, SR = rows[rows.length - 1].SR;
+  let beta = null, rho = null;
+  if (n >= 10) {
+    const sxx = rr.reduce((a, r) => a + r.E * r.E, 0), sxy = rr.reduce((a, r) => a + r.E * r.R, 0);
+    beta = sxx ? sxy / sxx : null;
+    const mx = rr.reduce((a, r) => a + r.E, 0) / n, my = rr.reduce((a, r) => a + r.R, 0) / n;
+    let cxy = 0, cxx = 0, cyy = 0;
+    for (const r of rr) { cxy += (r.E - mx) * (r.R - my); cxx += (r.E - mx) ** 2; cyy += (r.R - my) ** 2; }
+    rho = cxx && cyy ? cxy / Math.sqrt(cxx * cyy) : null;
+  }
+  let v;
+  if (days.every(d => !d.big)) v = ['quiet', 'KHÔNG CÓ CÁ MẬP: không có lệnh ≥ 500 tr đ'];
+  else if (Math.abs(SE) < ER.te) v = Math.abs(SR) >= ER.tr ? ['free', 'GIÁ TỰ ĐI: cá mập không nghiêng hẳn phía nào'] : ['quiet', 'IM LẶNG: cá mập không nghiêng phía nào, giá cũng đứng'];
+  else if (Math.sign(SE) === Math.sign(SR) && Math.abs(SR) >= ER.tr) v = [SE > 0 ? 'okb' : 'oks', 'ĐẠT: nỗ lực và giá cùng chiều'];
+  else if (Math.abs(SR) >= ER.tr) v = [SE > 0 ? 'absb' : 'abss', 'KHÔNG ĐẠT: giá đi ngược nỗ lực'];
+  else v = [SE > 0 ? 'absb' : 'abss', 'CHƯA RA KẾT QUẢ: nỗ lực lớn nhưng giá gần như đứng'];
+  return {rows, n, SE, SR, eff: Math.abs(SE) >= ER.te ? SR / SE : null, v, beta, rho,
+    lech: rr.filter(r => r.cls === 'absb' || r.cls === 'abss').length, dong: rr.filter(r => r.cls === 'okb' || r.cls === 'oks').length};
+}
+
+// tải cả danh mục một lần (getJSON có cache), ghép phiên sáng như tab Nhiều phiên, khung 20 phiên
+async function erLoad() {
+  if (ER_DATA && !ER_MISS) return ER_DATA;
+  const out = {};
+  let miss = 0;
+  await Promise.all(LATEST.items.map(async ({sym}) => {
+    let d;
+    try { d = await getJSON(`daily/${sym}.json`); } catch (e) { miss++; return; }
+    let all = d.days || [];
+    if (LIVE && LIVE.items.some(r => r.sym === sym)) {
+      try { const lv = await getJSON(`live/${sym}.json`); if (lv.dayrow) all = [...all, {...lv.dayrow, live: true}]; } catch (e) { /* chỉ phiên đủ */ }
+    }
+    if (all.length >= 2) out[sym] = {ex: d.ex, days: all.slice(-20)};
+  }));
+  ER_MISS = miss;
+  return (ER_DATA = out);
+}
+function erCompute() {
+  ER_M = {};
+  for (const s in ER_DATA) ER_M[s] = erMetrics(ER_DATA[s].days);
+  // độ lệch = nỗ lực chuẩn hoá − kết quả chuẩn hoá (theo max |.| cả danh mục): dương = mua mạnh mà giá kém
+  const ms = Object.values(ER_M);
+  const mE = Math.max(1e-9, ...ms.map(m => Math.abs(m.SE))), mR = Math.max(1e-9, ...ms.map(m => Math.abs(m.SR)));
+  for (const s in ER_M) ER_M[s].score = ER_M[s].SE / mE - ER_M[s].SR / mR;
+}
+
+async function renderNLKQ() {
+  fillSymSelect($('e-sym'));
+  $('e-sym').onchange = () => go('nlkq', $('e-sym').value);
+  for (const k of ['te', 'tr']) {
+    const inp = $('e-' + k);
+    inp.value = ER[k];
+    inp.oninput = () => { ER[k] = +inp.value; LS.set('of.er.' + k, ER[k]); erCompute(); erDraw(); };
+  }
+  $('e-scale').innerHTML = [['one', 'Thang riêng mã'], ['all', 'Thang chung danh mục']]
+    .map(([k, n]) => `<button class="chip ${ER.scale === k ? 'on' : ''}" data-k="${k}" aria-pressed="${ER.scale === k}">${n}</button>`).join('');
+  $('e-scale').onclick = e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    ER.scale = b.dataset.k;
+    $('e-scale').querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+    erDraw();
+  };
+  if (!ER_DATA) $('e-verdict').innerHTML = '<p class="empty">Đang tải cả danh mục…</p>';
+  await erLoad();
+  erCompute();
+  erDraw();
+}
+function erDraw() {
+  $('e-te-v').textContent = String(ER.te).replace('.', ',') + ' %';
+  $('e-tr-v').textContent = String(ER.tr).replace('.', ',') + ' %';
+  ['e-traj', 'e-bars', 'e-legend'].forEach(id => { $(id).innerHTML = ''; });
+  const m = ER_M[S.sym];
+  if (!m) { $('e-verdict').innerHTML = '<p class="empty">Mã này chưa đủ 2 phiên.</p>'; $('e-pill').textContent = ''; erTable(); return; }
+  const d = ER_DATA[S.sym];
+  $('e-pill').textContent = `${d.days.length} phiên gần nhất · ${d.ex}` + (d.days[d.days.length - 1].live ? ` · gồm phiên sáng tới ${LIVE.upto}` : '') +
+    (ER_MISS ? ` · thiếu ${ER_MISS} mã (lỗi mạng)` : '');
+  erVerdict(m); erTraj(m); erBars(m); erTable();
+}
+
+function erVerdict(m) {
+  const [k, txt] = m.v;
+  const c = k === 'okb' || k === 'oks' ? 'v-ok' : k === 'absb' || k === 'abss' ? 'v-bad' : 'v-mid';
+  const f = m.rows[0], l = m.rows[m.rows.length - 1];
+  $('e-verdict').innerHTML =
+    `<b>${S.sym}</b> · ${m.n} phiên (${dd(f.d)} → ${dd(l.d)}${l.live ? ' sáng' : ''}): cá mập ${m.SE >= 0 ? 'mua' : 'bán'} ròng <b>${erp(Math.abs(m.SE)).replace(/^\+/, '')}</b> KL/phiên TB, giá <b>${erp(m.SR)}</b>.<br>` +
+    `<span class="${c}">${txt}.</span> ` + (m.eff != null ? `Hiệu suất ${ers(m.eff)} % giá cho mỗi 1 % KL mua ròng. ` : '') +
+    `Đồng pha ${m.dong}/${m.n} phiên, lệch pha ${m.lech}/${m.n}. ` +
+    (m.n >= 10 ? `Tương quan từng phiên ρ = ${ers(m.rho)}, độ dốc β = ${ers(m.beta)}.` : `<span class="hint">Tương quan và độ dốc cần ≥ 10 phiên (đang có ${m.n}).</span>`);
+}
+
+function erTraj(m) {
+  const host = $('e-traj');
+  const W = Math.max(300, Math.min(1080, host.clientWidth || 720)), H = Math.round(Math.min(440, Math.max(260, W * .55)));
+  const L = 46, R = 12, T = 12, B = 32;
+  const src = ER.scale === 'all' ? Object.values(ER_M) : [m];
+  const mx = (Math.max(...src.flatMap(q => q.rows.map(r => Math.abs(r.SE)))) || 1) * 1.12;
+  const my = (Math.max(...src.flatMap(q => q.rows.map(r => Math.abs(r.SR)))) || 1) * 1.12;
+  const X = v => L + (v + mx) / (2 * mx) * (W - L - R), Y = v => T + (my - v) / (2 * my) * (H - T - B);
+  const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Quỹ đạo nỗ lực cộng dồn và giá'}, host);
+  // nền 4 góc: sx/sy = +1 phải/trên, −1 trái/dưới
+  const q = (sx, sy, c, t) => {
+    el('rect', {x: sx > 0 ? X(0) : L, y: sy > 0 ? T : Y(0), width: sx > 0 ? W - R - X(0) : X(0) - L, height: sy > 0 ? Y(0) - T : H - B - Y(0), fill: c, opacity: .07}, s);
+    el('text', {x: sx > 0 ? W - R - 4 : L + 4, y: sy > 0 ? T + 13 : H - B - 5, 'text-anchor': sx > 0 ? 'end' : 'start', style: `fill:${c};opacity:.85;font-weight:600`}, s, t);
+  };
+  q(1, 1, 'var(--buy)', 'mua → giá lên'); q(1, -1, 'var(--warn)', 'mua → giá không lên');
+  q(-1, 1, 'var(--vwap)', 'xả → giá vẫn lên'); q(-1, -1, 'var(--sell)', 'xả → giá xuống');
+  const step = v => { const r = v * 2 / 5, p = 10 ** Math.floor(Math.log10(r)), k = r / p; return (k > 5 ? 10 : k > 2 ? 5 : k > 1 ? 2 : 1) * p; };
+  const sx = step(mx), sy = step(my);
+  for (let v = -Math.floor(mx / sx) * sx; v <= mx; v += sx) {
+    el('line', {x1: X(v), x2: X(v), y1: T, y2: H - B, stroke: 'var(--grid)'}, s);
+    el('text', {x: X(v), y: H - B + 13, 'text-anchor': 'middle'}, s, ers(+v.toFixed(6)));
+  }
+  for (let v = -Math.floor(my / sy) * sy; v <= my; v += sy) {
+    el('line', {x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: 'var(--grid)'}, s);
+    el('text', {x: L - 4, y: Y(v) + 3, 'text-anchor': 'end'}, s, ers(+v.toFixed(6)));
+  }
+  el('line', {x1: X(0), x2: X(0), y1: T, y2: H - B, stroke: 'var(--line2)'}, s);
+  el('line', {x1: L, x2: W - R, y1: Y(0), y2: Y(0), stroke: 'var(--line2)'}, s);
+  el('text', {x: W - R, y: H - 3, 'text-anchor': 'end'}, s, 'nỗ lực cộng dồn (% KL chủ động TB/phiên) →');
+  el('text', {x: L + 4, y: Y(0) - 5}, s, '% giá');
+  if (m.beta != null) {
+    const yb = v => Y(Math.max(-my, Math.min(my, m.beta * v)));
+    el('line', {x1: X(-mx), y1: yb(-mx), x2: X(mx), y2: yb(mx), stroke: 'var(--gold3)', 'stroke-dasharray': '6 4'}, s);
+  }
+  const mk = el('marker', {id: 'er-ar', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto'}, el('defs', {}, s));
+  el('path', {d: 'M0 0L10 5L0 10z', fill: 'var(--gold2)'}, mk);
+  const P = m.rows;
+  for (let i = 1; i < P.length; i++) {
+    const x1 = X(P[i - 1].SE), y1 = Y(P[i - 1].SR), x2 = X(P[i].SE), y2 = Y(P[i].SR);
+    const len = Math.hypot(x2 - x1, y2 - y1) || 1, sh = Math.min(7, len / 3);
+    el('line', {x1, y1, x2: x2 - (x2 - x1) / len * sh, y2: y2 - (y2 - y1) / len * sh, stroke: 'var(--gold2)', 'stroke-width': 1.8,
+      'marker-end': len > 12 ? 'url(#er-ar)' : '', opacity: .35 + .65 * i / (P.length - 1)}, s);
+  }
+  P.forEach((r, i) => {
+    const last = i === P.length - 1, c = i ? ER_CLS[r.cls][1] : 'var(--ink)', cx = X(r.SE), cy = Y(r.SR);
+    el('title', {}, el('circle', {cx, cy, r: last ? 6.5 : i ? 4.2 : 3.5, fill: c, stroke: '#0B1628', 'stroke-width': 1.5}, s),
+      i ? `${dd(r.d)}: ${ER_CLS[r.cls][0]}\nphiên: nỗ lực ${erp(r.E)}, giá ${erp(r.R)}\ncộng dồn: nỗ lực ${erp(r.SE)}, giá ${erp(r.SR)}` : `${dd(r.d)}: phiên mốc, đóng ${px(r.close)}`);
+    const rt = cx > W * .62;   // gần mép phải: nhãn sang trái chấm
+    if (i === 0 || last || W > 600) el('text', {x: cx + (rt ? -1 : 1) * (last ? 9 : 6), y: cy + (last && cy < T + 30 ? 18 : -(last ? 8 : 6)),
+      'text-anchor': rt ? 'end' : 'start', style: `fill:${last ? 'var(--gold2)' : 'var(--mute)'};font-weight:${last ? 700 : 400};paint-order:stroke;stroke:#0B1628;stroke-width:3px`}, s,
+      dd(r.d) + (r.live ? ' sáng' : '') + (last ? `  ${erp(r.SE)} → ${erp(r.SR)}` : ''));
+  });
+}
+
+function erBars(m) {
+  const host = $('e-bars'), rr = m.rows.slice(1);
+  const W = Math.max(300, Math.min(1080, host.clientWidth || 720)), L = 44, R = 6, T = 16, HB = 150, H = T + HB + 58;
+  const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Nỗ lực và kết quả từng phiên'}, host);
+  const mE = Math.max(ER.te, ...rr.map(r => Math.abs(r.E))), mR = Math.max(ER.tr, ...rr.map(r => Math.abs(r.R)));
+  const y0 = T + HB / 2, yE = v => y0 - v / mE * HB / 2, yR = v => y0 - v / mR * HB / 2;
+  const cw = (W - L - R) / rr.length, bw = Math.min(26, cw * .3);
+  el('line', {x1: L, x2: W - R, y1: y0, y2: y0, stroke: 'var(--line2)'}, s);
+  for (const g of [1, -1]) el('line', {x1: L, x2: W - R, y1: yE(g * ER.te), y2: yE(g * ER.te), stroke: 'var(--gold3)', 'stroke-dasharray': '2 4', opacity: .6}, s);
+  el('text', {x: L - 4, y: T + 4, 'text-anchor': 'end', style: 'fill:var(--gold2)'}, s, ers(mE) + '%');
+  el('text', {x: L - 4, y: T + 16, 'text-anchor': 'end', style: 'fill:var(--ink)'}, s, ers(mR) + '%');
+  el('text', {x: L - 4, y: y0 + 4, 'text-anchor': 'end'}, s, '0');
+  rr.forEach((r, k) => {
+    const cx = L + cw * (k + .5);
+    const bar = (x, v, yf, c, tip) => el('title', {}, el('rect', {x, y: Math.min(yf(v), y0), width: bw, height: Math.max(1, Math.abs(yf(v) - y0)), fill: c, rx: 2}, s), tip);
+    bar(cx - bw - 1, r.E, yE, 'var(--gold2)', `${dd(r.d)} nỗ lực ${erp(r.E)} (${smil(r.big)} cp)`);
+    bar(cx + 1, r.R, yR, 'var(--ink)', `${dd(r.d)} giá ${erp(r.R)} → ${px(r.close)}`);
+    if (cw > 52) {
+      el('text', {x: cx - bw / 2 - 1, y: r.E >= 0 ? yE(r.E) - 3 : yE(r.E) + 11, 'text-anchor': 'middle', style: 'fill:var(--gold2);font-size:10px'}, s, ers(r.E));
+      el('text', {x: cx + bw / 2 + 1, y: r.R >= 0 ? yR(r.R) - 3 : yR(r.R) + 11, 'text-anchor': 'middle', style: 'fill:var(--ink);font-size:10px'}, s, ers(r.R));
+    }
+    el('text', {x: cx, y: T + HB + 16, 'text-anchor': 'middle', style: 'font-weight:600;fill:var(--ink)'}, s, dd(r.d) + (r.live ? '·s' : ''));
+    const c = ER_CLS[r.cls];
+    el('title', {}, el('rect', {x: cx - cw * .44, y: T + HB + 24, width: cw * .88, height: 22, rx: 5, fill: c[1]}, s), c[0]);
+    if (cw > 86) el('text', {x: cx, y: T + HB + 39, 'text-anchor': 'middle', style: 'fill:#0B1628;font-size:10px;font-weight:700'}, s, c[0].replace('Nỗ lực mua', 'Mua'));
+  });
+  $('e-legend').innerHTML = Object.values(ER_CLS).map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join('') +
+    '<span><i style="background:var(--gold2)"></i>nỗ lực</span><span><i style="background:var(--ink)"></i>kết quả</span>';
+}
+
+const ER_COLS = [
+  ['sym', 'Mã', m => m.sym], ['SE', 'Nỗ lực', m => m.SE], ['SR', 'Giá', m => m.SR], ['eff', 'Hiệu suất', m => m.eff ?? -Infinity],
+  ['v', 'Kết luận', m => m.v[0]], ['lech', 'Độ lệch', m => m.score], ['lp', 'Lệch pha', m => m.lech],
+];
+function erTable() {
+  const col = ER_COLS.find(c => c[0] === ER.sort);
+  const list = Object.keys(ER_M).map(s => ({sym: s, ...ER_M[s]}))
+    .sort((a, b) => { const x = col[2](a), y = col[2](b); return (x < y ? -1 : x > y ? 1 : 0) * (ER.desc ? -1 : 1); });
+  let h = '<tr>' + ER_COLS.map(c => `<th data-k="${c[0]}">${c[1]}${c[0] === ER.sort ? (ER.desc ? ' ↓' : ' ↑') : ''}</th>`).join('') + '</tr>';
+  for (const m of list) h += `<tr class="er-row${m.sym === S.sym ? ' cur' : ''}" data-s="${m.sym}"><td><b>${m.sym}</b></td>` +
+    `<td class="${m.SE >= 0 ? 'pos' : 'neg'}">${erp(m.SE)}</td><td class="${m.SR >= 0 ? 'pos' : 'neg'}">${erp(m.SR)}</td>` +
+    `<td>${m.eff == null ? '–' : ers(m.eff)}</td><td><span class="er-chip" style="background:${ER_CLS[m.v[0]][1]}">${m.v[1].split(':')[0]}</span></td>` +
+    `<td>${ers(m.score)}</td><td>${m.lech}/${m.n}</td></tr>`;
+  $('e-tbl').innerHTML = h;
+}
+$('e-tbl').addEventListener('click', e => {
+  const th = e.target.closest('th');
+  if (th) { const k = th.dataset.k; if (ER.sort === k) ER.desc = !ER.desc; else { ER.sort = k; ER.desc = k !== 'sym'; } erTable(); return; }
+  const tr = e.target.closest('tr.er-row');
+  if (tr) go('nlkq', tr.dataset.s);
+});
+
 // ---------------------------------------------------------------- ④ Hướng dẫn
 function renderGuide() {
   const s = STATE || {};
@@ -587,6 +823,6 @@ function renderGuide() {
   const so = LS.get('of.sort'); if (SORTS.some(s => s[0] === so)) { S.sort = so; sortDesc = SORTS.find(s => s[0] === so)[3]; }
   $('tagline').textContent = `Dòng lệnh chủ động · ${LATEST.items.length} mã KingStock · phiên ${LATEST.day ? dd(LATEST.day) : '–'}`;
   let t;
-  addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { if (S.tab === 'day' && D) { drawIntraday(); select(sel); } else if (S.tab === 'days') renderDays(); }, 200); });
+  addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { if (S.tab === 'day' && D) { drawIntraday(); select(sel); } else if (S.tab === 'days') renderDays(); else if (S.tab === 'nlkq' && ER_DATA) erDraw(); }, 200); });
   route();
 })();

@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 <header class="top">
@@ -120,6 +120,42 @@
     </div>
   </section>
 
+  <!-- ⑤ Nỗ lực & kết quả (28/09/2026, từ bản mẫu effort-result-lab người dùng duyệt) -->
+  <section class="tab" id="t-nlkq">
+    <div class="ctrl"><select id="e-sym" aria-label="Mã"></select><span class="pill" id="e-pill"></span></div>
+    <div class="card er-ctl">
+      <label>Ngưỡng nỗ lực <input type="range" id="e-te" min="1" max="15" step="0.5" value="3"> <b id="e-te-v"></b></label>
+      <label>Ngưỡng kết quả <input type="range" id="e-tr" min="0.1" max="2" step="0.1" value="0.5"> <b id="e-tr-v"></b></label>
+      <div class="chips" id="e-scale" role="group" aria-label="Thang quỹ đạo"></div>
+      <p class="hint" style="margin:0;flex-basis:100%"><b>Nỗ lực</b> = cá mập mua ròng (lệnh ≥ 500 tr đ) tính theo % KL chủ động trung bình/phiên của khung.
+        <b>Kết quả</b> = % thay đổi giá đóng cửa. Cùng đơn vị %, so được giữa các phiên và giữa các mã.</p>
+    </div>
+    <div class="card">
+      <h3><span class="num">1</span>Kết luận cả khung</h3>
+      <div class="er-verdict" id="e-verdict"></div>
+    </div>
+    <div class="card">
+      <h3><span class="num">2</span>Quỹ đạo nỗ lực → kết quả</h3>
+      <p class="hint">Mỗi chấm là một phiên, nối theo thời gian từ gốc (phiên đầu khung). Ngang = nỗ lực cộng dồn, dọc = giá so phiên đầu.
+        Về <b class="pos">trên-phải</b>: mua có kết quả · <b style="color:var(--warn)">dưới-phải</b>: mua mà giá không lên ·
+        <b class="vw">trên-trái</b>: giá lên dù cá mập xả · <b class="neg">dưới-trái</b>: xả có kết quả.</p>
+      <div id="e-traj"></div>
+    </div>
+    <div class="card">
+      <h3><span class="num">3</span>Từng phiên</h3>
+      <p class="hint">Cột vàng = nỗ lực, cột trắng = kết quả (mỗi cột một thang, chung mốc 0). Ô màu dưới là nhãn phiên.</p>
+      <div id="e-bars"></div>
+      <div class="er-legend" id="e-legend"></div>
+    </div>
+    <div class="card bronze">
+      <h3><span class="num">4</span>Cả danh mục</h3>
+      <p class="hint" style="color:#E7D6B5">Mặc định xếp theo <b>độ lệch</b>: đầu bảng là mã cá mập mua mạnh mà giá kém (cầu bị hấp thụ),
+        cuối bảng là mã cá mập bán mà giá vẫn tốt (cung bị đỡ). Bấm tiêu đề cột để xếp lại, bấm dòng để xem mã.</p>
+      <div class="scroll"><table class="days er-tbl" id="e-tbl"></table></div>
+    </div>
+    <p class="hint">Bản đồ mô tả, không phải tín hiệu mua bán. Tương quan và độ dốc chỉ hiện khi có ≥ 10 phiên. Kết quả là giá tuyệt đối, chưa trừ VN-Index.</p>
+  </section>
+
   <!-- ④ Hướng dẫn -->
   <section class="tab" id="t-guide">
     <div class="card">
@@ -199,6 +235,25 @@
       </ul>
       <p class="gp"><b>Đây là bản đồ mô tả chuyện đã xảy ra, không phải tín hiệu mua bán.</b> Vị trí giá so với VWAP/POC, delta, CVD đều đã đo và chưa cho lợi thế dự báo.</p>
     </div>
+    <div class="card">
+      <h3><span class="num">5</span>Đọc tab NL &amp; KQ</h3>
+      <p class="hint">Nỗ lực của cá mập có đẩy được giá không (ý "effort vs result" của Wyckoff). <a href="#nlkq" class="gold">Mở tab NL &amp; KQ</a></p>
+      <dl class="defs">
+        <dt class="gold">Nỗ lực</dt><dd>Cá mập mua ròng trong phiên (lệnh ≥ 500 tr đ), chia cho KL chủ động trung bình/phiên của khung. <span>+10 % = cá mập mua ròng bằng một phần mười phiên bình thường.</span></dd>
+        <dt>Kết quả</dt><dd>% thay đổi giá đóng cửa so phiên trước.</dd>
+        <dt class="pos">Mua có kết quả</dt><dd>Cá mập mua ròng vượt ngưỡng và giá tăng vượt ngưỡng.</dd>
+        <dt style="color:var(--warn)">Cầu CM bị hấp thụ</dt><dd>Cá mập mua mà giá đứng hoặc giảm. <span>Có cung đang chặn; hoặc cá mập gom ở giá thấp.</span></dd>
+        <dt class="neg">Xả có kết quả</dt><dd>Cá mập bán ròng và giá giảm.</dd>
+        <dt class="vw">Cung CM bị đỡ</dt><dd>Cá mập bán mà giá đứng hoặc tăng. <span>Có người khác hấp thụ hàng cá mập.</span></dd>
+        <dt style="color:#8FA3BF">Giá chạy không cần CM</dt><dd>Cá mập gần như đứng ngoài mà giá đi mạnh.</dd>
+      </dl>
+      <ul class="plain">
+        <li><b>Quỹ đạo:</b> nhìn chấm cuối nằm ở góc nào và mũi tên gần đây đi về đâu. Độ dốc càng lớn thì mỗi đồng cá mập bỏ ra đẩy giá càng xa.</li>
+        <li><b>Hiệu suất</b> = % giá cả khung ÷ % nỗ lực cả khung (dương là cùng chiều). So giữa các mã ở bảng 4.</li>
+        <li>Phiên đầu khung chỉ làm mốc, không tính nỗ lực, nên số cộng dồn khác hàng CVD cá mập ở tab Nhiều phiên.</li>
+        <li>Đây là bản đồ mô tả. Các lần đo trước chưa thấy delta/cá mập dự báo được giá.</li>
+      </ul>
+    </div>
   </section>
 </div>
 
@@ -206,10 +261,11 @@
   <a href="#list" data-tab="list"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Danh mục</a>
   <a href="#day" data-tab="day"><svg viewBox="0 0 24 24"><path d="M6 4v16M12 7v10M18 5v14"/><path d="M4 9h4M10 12h4M16 8h4"/></svg>Trong phiên</a>
   <a href="#days" data-tab="days"><svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16"/><path d="M8 15l4-4 3 3 5-6"/></svg>Nhiều phiên</a>
+  <a href="#nlkq" data-tab="nlkq"><svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 16l5-5 3 3 5-6"/><path d="M15 8h4v4"/><circle cx="6" cy="16" r="1.4"/></svg>NL &amp; KQ</a>
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 <script>
 if ('serviceWorker' in navigator) {
   // Bản mới tiếp quản (skipWaiting + claim) → tải lại một lần để thấy ngay, không phải mở app hai lần
