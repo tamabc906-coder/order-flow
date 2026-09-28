@@ -215,6 +215,7 @@ def test_live_built_then_removed_when_full_session_lands(job_dirs):
     assert idx["day"] == "2026-09-28" and idx["upto"] == "11:29" and idx["items"][0]["delta"] == 200
     doc = json.loads((rd.LIVE_DIR / "AAA.json").read_text(encoding="utf-8"))
     assert doc["partial"] and doc["ref"] == 10.0
+    assert doc["dayrow"]["d"] == "2026-09-28" and doc["dayrow"]["cvd"] == 400   # nối tiếp phiên 25/09 (+200 + 200)
     assert rd.build_live(items, {}, None, "2026-09-25") == 0 and rd.LIVE_IDX.exists()   # --rebuild giữa trưa: giữ
     assert rd.build_live(items, {}, {}, "2026-09-28") == 0                               # 16:00: phiên đủ đã vào kho
     assert not rd.LIVE_IDX.exists() and not rd.LIVE_DIR.exists()

@@ -368,8 +368,13 @@ async function renderDays() {
   $('m-whale').innerHTML = '';
   let data;
   try { data = await getJSON(`daily/${S.sym}.json`); } catch (e) { host.innerHTML = '<p class="empty">Không tải được dữ liệu mã này.</p>'; return; }
-  const Ds = data.days.slice(-20);
-  $('m-pill').textContent = `${Ds.length} phiên gần nhất · ${data.ex}`;
+  // phiên sáng dở dang (lượt 12:05) = cột cuối, CVD đã nối tiếp các phiên đủ ở job
+  let all = data.days;
+  if (LIVE && LIVE.items.some(r => r.sym === S.sym)) {
+    try { const lv = await getJSON(`live/${S.sym}.json`); if (lv.dayrow) all = [...all, {...lv.dayrow, live: true}]; } catch (e) { /* chỉ phiên đủ */ }
+  }
+  const Ds = all.slice(-20);
+  $('m-pill').textContent = `${Ds.length} phiên gần nhất · ${data.ex}` + (all.length > data.days.length ? ` · gồm phiên sáng tới ${LIVE.upto}` : '');
   if (!Ds.length) { host.innerHTML = '<p class="empty">Chưa có phiên nào.</p>'; $('m-table').innerHTML = ''; return; }
   const W2 = Math.max(300, Math.min(1080, host.clientWidth || 720)), L2 = 40, R2 = 6, H1 = 250, HDl = 60, HCv = 60, G = 18;
   const y10 = 10, yd0 = y10 + H1 + G + 12, yc0 = yd0 + HDl + G + 12, H2 = yc0 + HCv + 10;
@@ -401,7 +406,8 @@ async function renderDays() {
     el('rect', {x: cx, y: y(d.close) + 2, width: Math.min(1, d.x / mx) * half, height: 5, fill: 'var(--x)'}, s2);
     el('line', {x1: cx - half, x2: cx + half, y1: y(d.close), y2: y(d.close), stroke: 'var(--ink)', 'stroke-width': 1.4}, s2);
     const t = el('text', {x: cx, y: y10 + H1 + 14, 'text-anchor': 'middle', style: `font-weight:600;fill:${d.intraday ? 'var(--gold2)' : 'var(--ink)'};cursor:${d.intraday ? 'pointer' : 'default'}`}, s2, dd(d.d));
-    if (d.intraday) t.addEventListener('click', () => go('day', S.sym, d.d));
+    if (d.intraday) t.addEventListener('click', () => go('day', S.sym, d.live ? LIVE_DAY : d.d));
+    if (d.live) liveTag(s2, cx, y10 + H1 + 26);
     if (d.vw != null) {
       const vl = el('line', {x1: cx - half, x2: cx - half * .15, y1: y(d.vw), y2: y(d.vw), stroke: 'var(--vwap)', 'stroke-width': 2.4}, s2);
       el('title', {}, vl, `VWAP ${dd(d.d)}: ${px(d.vw)} · đóng cửa ${vsp(d.close, d.vw)}`);
@@ -438,7 +444,7 @@ async function renderDays() {
   drawWhale(Ds, {W2, L2, R2, H1, lo, hi, colW, half});
 
   let t = '<tr><th>Phiên</th><th>Đóng cửa</th><th class="vw">VWAP</th><th title="Đóng cửa so với VWAP khớp liên tục của phiên">Đóng/VWAP</th><th>Mua CĐ</th><th>Bán CĐ</th><th>Delta</th><th title="Mua CĐ / (mua CĐ + bán CĐ)">Mua CĐ %</th><th title="So với trung bình tối đa 20 phiên trước của chính mã này">so TB</th><th>CVD</th><th>ATO/ATC</th><th>Lệnh lớn ròng</th></tr>';
-  for (const d of [...data.days].reverse()) t += `<tr><td>${d.intraday ? `<a href="#day/${S.sym}/${d.d}" class="gold">${dd(d.d)}</a>` : dd(d.d)}${d.f !== 1 ? `<span class="tag" title="Giá thô ${px(d.raw)} × ${d.f}">điều chỉnh</span>` : ''}${d.gap ? `<span class="tag">hụt ${fmt(d.gap)}</span>` : ''}</td>` +
+  for (const d of [...all].reverse()) t += `<tr><td>${d.intraday ? `<a href="#day/${S.sym}/${d.live ? LIVE_DAY : d.d}" class="gold">${dd(d.d)}</a>` : dd(d.d)}${d.live ? '<span class="tag">sáng</span>' : ''}${d.f !== 1 ? `<span class="tag" title="Giá thô ${px(d.raw)} × ${d.f}">điều chỉnh</span>` : ''}${d.gap ? `<span class="tag">hụt ${fmt(d.gap)}</span>` : ''}</td>` +
     `<td>${px(d.close)}</td><td class="vw">${d.vw == null ? '–' : px(d.vw)}</td>` +
     `<td class="${d.cvw == null ? '' : d.cvw >= 0 ? 'pos' : 'neg'}">${d.cvw == null ? '–' : vsp(d.close, d.vw)}</td><td>${mil(d.buy)}</td><td>${mil(d.sell)}</td><td class="${d.delta >= 0 ? 'pos' : 'neg'}">${smil(d.delta)}</td>` +
     `<td>${pct(d.share)}</td><td class="${d.rel == null ? '' : d.rel >= 0 ? 'pos' : 'neg'}">${spt(d.rel)}</td>` +
@@ -451,6 +457,9 @@ async function renderDays() {
 // d.blv = [[giá, bán_lớn, mua_lớn]] đã quy giá điều chỉnh; d.blv_ok = false khi phiên chưa lưu cá mập theo mức giá.
 // giá bình quân theo KL của cột i trong blv ([giá, bán_lớn, mua_lớn]): i = 2 mua, 1 bán
 const wv = (blv, i) => { let pv = 0, v = 0; for (const r of blv || []) { pv += r[0] * r[i]; v += r[i]; } return v ? pv / v : null; };
+// nhãn "sáng" dưới ngày của cột phiên dở dang
+const liveTag = (s2, cx, yy) => el('text', {x: cx, y: yy, 'text-anchor': 'middle', style: 'font-size:10px;fill:var(--vwap)'}, s2, `sáng·${LIVE.upto}`);
+
 function drawWhale(Ds, g) {
   const host = $('m-whale');
   host.innerHTML = '';
@@ -469,6 +478,7 @@ function drawWhale(Ds, g) {
     const cx = L2 + colW * (k + .5);
     el('line', {x1: cx, x2: cx, y1: y10, y2: y10 + H1, stroke: 'var(--line)'}, s2);
     el('text', {x: cx, y: y10 + H1 + 14, 'text-anchor': 'middle', style: 'font-weight:600;fill:var(--ink)'}, s2, dd(d.d));
+    if (d.live) liveTag(s2, cx, y10 + H1 + 26);
     if (d.blv_ok === false || d.blv == null) {
       el('text', {x: cx, y: y10 + H1 / 2, 'text-anchor': 'middle', style: 'fill:var(--mute)'}, s2, 'chưa có');
       return;

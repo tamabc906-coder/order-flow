@@ -170,10 +170,12 @@ def build_live(items: list[dict], closes: dict, partial: dict | None, day: str |
             continue
         recs, cl = records(sym), closes.get(sym, {})
         doc = intraday_doc(sym, ex, rec, recs[-1] if recs else None, cl)
-        doc.update(partial=True, upto=rec["upto"])
-        dump(LIVE_DIR / f"{sym}.json", doc)
         # share/rel so với TB 20 phiên ĐỦ trước đó — share là tỷ lệ nên phiên sáng so được với phiên đủ
-        rows.append(list_row(it, daily.days(recs + [rec], cl, DAILY_OUT), doc))
+        dl = daily.days(recs + [rec], cl, DAILY_OUT)
+        # dayrow = cột phiên sáng cho tab Nhiều phiên, cùng dạng daily/<MÃ>.json (CVD nối tiếp các phiên đủ)
+        doc.update(partial=True, upto=rec["upto"], dayrow=dl[-1])
+        dump(LIVE_DIR / f"{sym}.json", doc)
+        rows.append(list_row(it, dl, doc))
         upto.append(rec["upto"])
     if rows:
         dump(LIVE_IDX, {"generated": datetime.now(TZ).isoformat(timespec="seconds"), "day": rows[0]["day"],
