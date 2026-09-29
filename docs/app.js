@@ -178,7 +178,7 @@ async function renderDay(wantDay) {
   const days = daily.days.filter(d => d.intraday).map(d => d.d).reverse();
   if (LIVE && LIVE.items.some(r => r.sym === S.sym)) days.unshift(LIVE_DAY);
   if (!days.length) {
-    $('d-date').innerHTML = ''; $('d-tiles').innerHTML = ''; $('fp').innerHTML = ''; $('d-sigs').innerHTML = '';
+    $('d-date').innerHTML = ''; $('d-tiles').innerHTML = ''; $('fp').innerHTML = ''; $('fe-sigs').innerHTML = '';
     $('d-chart').innerHTML = '<p class="empty">Mã này chưa có phiên nào đủ tick để vẽ nến 5 phút.</p>';
     return;
   }
@@ -222,13 +222,7 @@ function showTF() {
     if (keep) { const m = mins(keep), i = V.bars.findIndex((x, k) => !x.auction && mins(x.t) <= m && (k + 1 >= V.bars.length || V.bars[k + 1].auction || mins(V.bars[k + 1].t) > m)); if (i >= 0) select(i); }
   });
   drawIntraday();
-  $('d-sigs').innerHTML = V.sigs.length ? V.sigs.map(s =>
-    `<li><button data-i="${s.i}">${s.t}</button>${sigTag(s.kind)}. ${esc(s.text)}</li>`).join('')
-    : `<li class="empty">${D.no_side ? 'Nguồn không có bên chủ động cho mã này — không đánh được dấu hiệu.' : 'Phiên này không có dấu hiệu nào vượt ngưỡng.'}</li>`;
-  $('d-sigs').querySelectorAll('button').forEach(b => b.onclick = () => {
-    select(+b.dataset.i);
-    if (innerWidth <= 860) $('fpcard').scrollIntoView({behavior: 'smooth', block: 'start'});
-  });
+  FE.prep();
   const first = V.sigs.length ? V.sigs[V.sigs.length - 1].i
     : V.bars.reduce((m, b, i) => Math.abs(b.d) > Math.abs(V.bars[m].d) ? i : m, 0);
   select(first);
@@ -351,6 +345,7 @@ function select(i) {
   $('fp-sigs').innerHTML = sigs.map(s => `<li>${sigTag(s.kind)}: ${esc(s.text)}</li>`).join('') + imbTxt ||
     '<li class="empty">Nến này không có dấu hiệu nào được đánh.</li>';
   $('fp-prev').disabled = sel === 0; $('fp-next').disabled = sel === B.length - 1;
+  FE.draw();
 }
 $('fp-prev').onclick = () => select(sel - 1);
 $('fp-next').onclick = () => select(sel + 1);
@@ -359,6 +354,468 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') select(sel - 1);
   if (e.key === 'ArrowRight') select(sel + 1);
 });
+
+// ---------------------------------------------------------------- ② Trong phiên: nỗ lực – kết quả & cá mập
+// 29/09/2026, chép từ bản mẫu c:\Claude code\footprint-er-lab người dùng duyệt. Gói trong FE để không đụng tên của app.
+// Nến đang chọn dùng chung `sel` của app: bấm ở đâu cũng gọi select(i); select() gọi FE.draw().
+const FE = (() => {
+  const F = {tf: 15, i: null, thr: +LS.get('of.fe.thr') || 15};
+  let BARS = [], BASE_SH = 0, AVG_V = 1, EX = 'HOSE';
+  const s1 = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString('vi-VN', {maximumFractionDigits: 1});
+  const tickSize = (p, ex) => (ex || 'HOSE').toUpperCase() !== 'HOSE' ? .1 : p < 10 ? .01 : p < 50 ? .05 : .1;
+  const eq = (a, b) => Math.abs(a - b) < 1e-6;
+
+  const LAB = {
+    okb:  ['Mua có kết quả', 'var(--buy)', 'Mua chủ động mạnh và giá đóng ở nửa trên nến.'],
+    absb: ['Mua bị hấp thụ', 'var(--warn)', 'Mua chủ động mạnh mà giá đóng ở nửa dưới: có người bán đặt chờ chặn phía trên.'],
+    oks:  ['Bán có kết quả', 'var(--sell)', 'Bán chủ động mạnh và giá đóng ở nửa dưới nến.'],
+    abss: ['Bán bị hấp thụ', 'var(--vwap)', 'Bán chủ động mạnh mà giá đóng ở nửa trên: có người mua đặt chờ nuốt lệnh bán.'],
+    free: ['Giá chạy không cần lực', 'var(--free)', 'Delta gần mức thường của phiên nhưng giá đi rõ một chiều.'],
+    quiet:['Giằng co', 'var(--quiet)', 'Nỗ lực không nổi bật, giá cũng không đi đâu.'],
+  };
+
+  // ---------------------------------------------------------------- tính nỗ lực / kết quả từng nến
+  function prep() {
+    BARS = D.tf[String(F.tf)].bars.map((b, k) => ({...b, k})).filter(b => !b.auction);
+    const act = BARS.reduce((a, b) => a + b.buy + b.sell, 0) || 1;
+    BASE_SH = BARS.reduce((a, b) => a + b.d, 0) / act * 100;
+    AVG_V = act / (BARS.length || 1);
+    for (const b of BARS) {
+      const a = b.buy + b.sell;
+      b.sh = a ? b.d / a * 100 : 0;
+      b.E = b.sh - BASE_SH;                                   // nỗ lực so TB phiên (điểm %)
+      b.rel = a / AVG_V;
+      b.CL = b.h > b.l ? (b.c - b.l) / (b.h - b.l) * 2 - 1 : 0; // −1 đóng đáy … +1 đóng đỉnh
+      b.mv = Math.round((b.c - b.o) / tickSize(b.h, EX));
+      const strong = Math.abs(b.E) >= F.thr && b.rel >= .5;
+      const rngT = Math.round((b.h - b.l) / tickSize(b.h, EX));
+      b.lab = strong ? (b.E > 0 ? (b.CL > 0 ? 'okb' : 'absb') : (b.CL < 0 ? 'oks' : 'abss'))
+                     : (rngT >= 2 && Math.abs(b.CL) >= .5 ? 'free' : 'quiet');
+      if (strong && b.CL === 0) b.lab = 'quiet';
+    }
+  }
+
+  // dấu hiệu có mức/vùng + vòng đời (xét các nến sau trong phiên)
+  function levels(b) {
+    const out = [], step = tickSize(b.h, EX), after = BARS.filter(x => x.k > b.k);
+    const lowRow = b.lv[b.lv.length - 1], highRow = b.lv[0];
+    const fate = (brk, test) => {
+      const j = after.find(brk);
+      if (j) return {st: 'bad', txt: `bị phá lúc ${j.t}`, at: j};
+      const n = after.filter(test).length;
+      return n ? {st: 'ok', txt: `giữ được (test ${n} lần)`} : {st: 'wait', txt: after.length ? 'chưa test lại' : 'nến cuối phiên'};
+    };
+    for (const kind of b.sig) {
+      if (kind === 'absorb_b') {
+        const p = lowRow[1] >= .4 * b.vol ? lowRow[0] : b.l;
+        out.push({kind, side: 'up', lo: p, hi: p, name: 'Hấp thụ lệnh bán', txt: `Mức đỡ ${px(p)}: bán dồn mà giá không thủng.`,
+          f: fate(x => x.l < p - 1e-9, x => x.l <= p + step + 1e-9)});
+      } else if (kind === 'absorb_s') {
+        const p = highRow[2] >= .4 * b.vol ? highRow[0] : b.h;
+        out.push({kind, side: 'down', lo: p, hi: p, name: 'Hấp thụ lệnh mua', txt: `Mức chặn ${px(p)}: mua dồn mà giá không vượt.`,
+          f: fate(x => x.h > p + 1e-9, x => x.h >= p - step - 1e-9)});
+      } else if (kind === 'stack_b' || kind === 'stack_s') {
+        const sd = kind === 'stack_b' ? 'b' : 's';
+        const ps = b.imb.filter(r => r[1] === sd).map(r => r[0]).sort((a, c) => a - c);
+        let best = [], run = [];
+        for (const p of ps) { if (run.length && p - run[run.length - 1] > step + 1e-9) run = []; run.push(p); if (run.length > best.length) best = [...run]; }
+        if (best.length < 2) continue;
+        const lo = best[0], hi = best[best.length - 1];
+        if (sd === 's') {
+          const inCandle = b.c > hi + 1e-9;
+          out.push({kind, side: 'down', lo, hi, name: `Imbalance bán xếp chồng ${best.length} ô`, txt: `Vùng kháng cự ${px(lo)}–${px(hi)}.`,
+            f: inCandle ? {st: 'bad', txt: 'bị vượt ngay trong nến'} : fate(x => x.c > hi + 1e-9, x => x.h >= lo - 1e-9)});
+        } else {
+          const inCandle = b.c < lo - 1e-9;
+          out.push({kind, side: 'up', lo, hi, name: `Imbalance mua xếp chồng ${best.length} ô`, txt: `Vùng hỗ trợ ${px(lo)}–${px(hi)}.`,
+            f: inCandle ? {st: 'bad', txt: 'bị thủng ngay trong nến'} : fate(x => x.c < lo - 1e-9, x => x.l <= hi + 1e-9)});
+        }
+      } else if (kind === 'exh_b') {
+        out.push({kind, side: 'up', lo: b.l, hi: b.l, name: 'Cạn kiệt bán', txt: `Đáy ${px(b.l)} gần như không ai bán tiếp.`,
+          f: fate(x => x.l < b.l - 1e-9, x => x.l <= b.l + step + 1e-9)});
+      } else if (kind === 'exh_s') {
+        out.push({kind, side: 'down', lo: b.h, hi: b.h, name: 'Cạn kiệt mua', txt: `Đỉnh ${px(b.h)} gần như không ai mua tiếp.`,
+          f: fate(x => x.h > b.h + 1e-9, x => x.h >= b.h - step - 1e-9)});
+      } else if (kind === 'fail_b') out.push({kind, side: 'down', name: 'Hấp thụ mua thất bại', txt: 'Giá thủng mức hấp thụ của nến trước: bên đỡ giá đã thua.', f: null});
+      else if (kind === 'fail_s') out.push({kind, side: 'up', name: 'Hấp thụ bán thất bại', txt: 'Giá vượt mức chặn của nến trước: bên chặn đã thua.', f: null});
+      else if (kind === 'div_b') out.push({kind, side: 'up', name: 'Phân kỳ đáy', txt: 'Giá thủng đáy nhưng CVD cao hơn: lực bán yếu dần.', f: null});
+      else if (kind === 'div_s') out.push({kind, side: 'down', name: 'Phân kỳ đỉnh', txt: 'Giá vượt đỉnh nhưng CVD thấp hơn: lực mua yếu dần.', f: null});
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- ③ dải cả phiên
+  function drawStrip() {
+    const host = $('fe-strip'); host.innerHTML = '';
+    const W = Math.max(320, host.clientWidth), n = BARS.length, L = 40, R = 6;
+    const HP = 150, HE = 90, T = 8, yp0 = T, ye0 = yp0 + HP + 22, yl0 = ye0 + HE + 20, H = yl0 + 40;
+    const cw = (W - L - R) / n;
+    const lo = Math.min(...BARS.map(b => b.l)), hi = Math.max(...BARS.map(b => b.h)), pad = (hi - lo) * .08 || .1;
+    const yP = p => yp0 + (hi + pad - p) / (hi - lo + 2 * pad) * HP;
+    const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Nến giá, nỗ lực và kết quả từng nến trong phiên'}, host);
+    // lưới giá
+    const st = tickSize(hi, EX) * Math.max(1, Math.round((hi - lo) / tickSize(hi, EX) / 5));
+    for (let p = Math.ceil((lo - pad) / st) * st; p <= hi + pad; p += st) {
+      el('line', {x1: L, x2: W - R, y1: yP(p), y2: yP(p), stroke: 'var(--grid)'}, s);
+      el('text', {x: L - 4, y: yP(p) + 3, 'text-anchor': 'end'}, s, px(+p.toFixed(2)));
+    }
+    // VWAP luỹ kế
+    const vw = BARS.filter(b => b.vw != null);
+    if (vw.length > 1) el('path', {d: vw.map((b, j) => (j ? 'L' : 'M') + (L + cw * (BARS.indexOf(b) + .5)).toFixed(1) + ' ' + yP(b.vw).toFixed(1)).join(''), fill: 'none', stroke: 'var(--vwap)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3', opacity: .8}, s);
+    const mE = Math.max(F.thr * 1.5, ...BARS.map(b => Math.abs(b.E)));
+    const yE = v => ye0 + HE / 2 - v / mE * HE / 2, yR = v => ye0 + HE / 2 - v * HE / 2;
+    el('line', {x1: L, x2: W - R, y1: yE(0), y2: yE(0), stroke: 'var(--line2)'}, s);
+    for (const g of [1, -1]) el('line', {x1: L, x2: W - R, y1: yE(g * F.thr), y2: yE(g * F.thr), stroke: 'var(--gold3)', 'stroke-dasharray': '2 4', opacity: .6}, s);
+    el('text', {x: L - 4, y: ye0 + 8, 'text-anchor': 'end', style: 'fill:var(--gold2)'}, s, 'nỗ lực');
+    el('text', {x: L - 4, y: ye0 + 20, 'text-anchor': 'end', style: 'fill:var(--ink)'}, s, 'kết quả');
+    BARS.forEach((b, j) => {
+      const cx = L + cw * (j + .5), bw = Math.max(2, Math.min(14, cw * .5)), up = b.c >= b.o, col = up ? 'var(--buy)' : 'var(--sell)';
+      const g = el('g', {style: 'cursor:pointer'}, s);
+      el('rect', {x: cx - cw / 2, y: T, width: cw, height: H - T, fill: 'transparent'}, g);
+      if (b.k === F.i) el('rect', {x: cx - cw / 2 + 1, y: T, width: cw - 2, height: H - T - 2, rx: 6, fill: 'rgba(212,175,106,.10)', stroke: 'var(--gold)', 'stroke-width': 1}, g);
+      el('line', {x1: cx, x2: cx, y1: yP(b.h), y2: yP(b.l), stroke: col}, g);
+      el('rect', {x: cx - bw / 2, y: yP(Math.max(b.o, b.c)), width: bw, height: Math.max(1.5, Math.abs(yP(b.o) - yP(b.c))), fill: col}, g);
+      if (b.lab === 'abss' || b.lab === 'absb') {
+        const cy = b.lab === 'abss' ? yP(b.l) + 10 : yP(b.h) - 10;
+        el('circle', {cx, cy, r: 6, fill: 'none', stroke: LAB[b.lab][1], 'stroke-width': 2}, g);
+      }
+      const w2 = Math.max(2, Math.min(10, cw * .28));
+      el('rect', {x: cx - w2 - .5, y: Math.min(yE(b.E), yE(0)), width: w2, height: Math.max(1, Math.abs(yE(b.E) - yE(0))), fill: 'var(--gold2)', rx: 1}, g);
+      el('rect', {x: cx + .5, y: Math.min(yR(b.CL), yR(0)), width: w2, height: Math.max(1, Math.abs(yR(b.CL) - yR(0))), fill: 'var(--ink)', rx: 1}, g);
+      el('rect', {x: cx - cw * .42, y: yl0, width: cw * .84, height: 14, rx: 4, fill: LAB[b.lab][1]}, g);
+      if (cw > 34 || j % 2 === 0) el('text', {x: cx, y: yl0 + 30, 'text-anchor': 'middle', style: `font-size:${cw > 40 ? 10.5 : 9}px;fill:${b.k === F.i ? 'var(--gold2)' : 'var(--mute)'};font-weight:${b.k === F.i ? 700 : 400}`}, g, b.t);
+      el('title', {}, g, `${b.t} · ${LAB[b.lab][0]}\nnỗ lực ${s1(b.E)} điểm so TB (delta ${s1(b.sh)} % KL)\ngiá đóng ${b.CL >= 0 ? 'nửa trên' : 'nửa dưới'} nến, ${b.mv >= 0 ? '+' : ''}${b.mv} bước`);
+      g.addEventListener('click', () => { select(b.k); });
+    });
+    $('fe-legend').innerHTML = Object.values(LAB).map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join('') +
+      '<span><i style="background:var(--gold2)"></i>nỗ lực</span><span><i style="background:var(--ink)"></i>kết quả</span><span><i style="background:var(--vwap);height:2px;vertical-align:3px"></i>VWAP</span>';
+  }
+
+  // ---------------------------------------------------------------- ① phán quyết
+  function drawVerdict() {
+    const b = BARS.find(x => x.k === F.i);
+    if (!b) { $('fe-verdict').innerHTML = '<p class="empty">Nến khớp định kỳ (ATO/ATC): không có bên chủ động, không đánh giá nỗ lực.</p>'; return; }
+    const [ln, lc, ld] = LAB[b.lab];
+    const tf = F.tf, t2 = (() => { const [h, m] = b.t.split(':').map(Number), x = h * 60 + m + tf; return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); })();
+    const buyPct = (b.buy / ((b.buy + b.sell) || 1)) * 100;
+    const clPct = (b.CL + 1) / 2 * 100;
+    const whale = b.bb + b.bs ? `Cá mập (lệnh ≥ 500 tr đ): mua ${fmt(b.bb)} · bán ${fmt(b.bs)} → <b class="${b.bb - b.bs >= 0 ? 'pos' : 'neg'}">${sgn(b.bb - b.bs)}</b> cp.` : 'Không có lệnh cá mập trong nến.';
+    const lv = levels(b);
+    // sau đó: giá đóng của 1, 2, 4 nến sau
+    const idx = BARS.indexOf(b), fut = [1, 2, 4].map(k => BARS[idx + k]).filter(Boolean);
+    const aft = fut.map(x => `${x.t}: ${px(x.c)} (${x.c >= b.c ? '+' : ''}${Math.round((x.c - b.c) / tickSize(b.h, EX))} bước)`).join(' · ');
+    const key = lv.filter(x => x.f && (x.kind.startsWith('absorb') || x.kind.startsWith('stack') || x.kind.startsWith('exh')));
+    const agree = b.lab === 'abss' || b.lab === 'okb' ? 'up' : b.lab === 'absb' || b.lab === 'oks' ? 'down' : null;
+    let outcome = '';
+    if (agree && fut.length) {
+      const last = fut[fut.length - 1], good = agree === 'up' ? last.c > b.c : last.c < b.c;
+      outcome = `<li><b>Kết quả sau ${fut.length === 3 ? 4 : fut.length} nến:</b> nến gợi ý giá ${agree === 'up' ? 'lên' : 'xuống'}, thực tế giá ${last.c > b.c ? 'lên' : last.c < b.c ? 'xuống' : 'đứng'} → ` +
+        `<span class="stag ${good ? 'sg-ok' : 'sg-bad'}">${good ? '✓ đúng hướng' : '✕ ngược hướng'}</span></li>`;
+    }
+    $('fe-verdict').innerHTML = `
+      <div class="vhead"><span class="t">Nến ${b.t}–${t2}</span>
+        <span class="ohlc">Mở ${px(b.o)} · Cao ${px(b.h)} · Thấp ${px(b.l)} · Đóng ${px(b.c)} · KL ${fmt(b.buy + b.sell)} (${b.rel.toFixed(1).replace('.', ',')}× TB nến)</span></div>
+      <div class="duel">
+        <div class="side">
+          <div class="k">Nỗ lực</div>
+          <div class="big ${b.d >= 0 ? 'pos' : 'neg'}">${b.d >= 0 ? '▲ MUA' : '▼ BÁN'} ${sgn(b.d)}</div>
+          <div class="sub">delta ${s1(b.sh)} % KL · TB phiên ${s1(BASE_SH)} % → <b class="${b.E >= 0 ? 'pos' : 'neg'}">${s1(b.E)} điểm</b> ${Math.abs(b.E) >= F.thr ? '(mạnh)' : '(thường)'}</div>
+          <div class="meter" title="Tỷ lệ mua chủ động"><i style="left:0;width:${100 - buyPct}%;background:var(--sell)"></i><i style="right:0;width:${buyPct}%;background:var(--buy)"></i><i class="mid"></i></div>
+          <div class="sub" style="margin-top:3px">bán ${Math.round(100 - buyPct)} % · mua ${Math.round(buyPct)} %</div>
+        </div>
+        <div class="side">
+          <div class="k">Kết quả</div>
+          <div class="big ${b.c >= b.o ? 'pos' : 'neg'}">${b.c > b.o ? '▲' : b.c < b.o ? '▼' : '■'} ${b.mv >= 0 ? '+' : ''}${b.mv} bước (${s1((b.c / b.o - 1) * 100)} %)</div>
+          <div class="sub">giá đóng ở <b>${Math.round(clPct)} %</b> chiều cao nến (${b.CL > .5 ? 'sát đỉnh' : b.CL > 0 ? 'nửa trên' : b.CL < -.5 ? 'sát đáy' : b.CL < 0 ? 'nửa dưới' : 'giữa'})</div>
+          <div class="meter" title="Vị trí giá đóng trong nến"><i style="left:0;width:${clPct}%;background:linear-gradient(90deg,rgba(241,230,208,.15),var(--ink))"></i><i class="mid"></i></div>
+          <div class="sub" style="margin-top:3px">thấp ${px(b.l)} ← → cao ${px(b.h)}</div>
+        </div>
+      </div>
+      <div class="label" style="background:${lc}">${b.lab === 'abss' || b.lab === 'absb' ? '◆ ' : ''}${ln.toUpperCase()}: nỗ lực và kết quả ${b.lab === 'abss' || b.lab === 'absb' ? 'NGƯỢC CHIỀU' : b.lab === 'okb' || b.lab === 'oks' ? 'CÙNG CHIỀU' : 'không rõ'}<small>${ld}</small></div>
+      <ul class="after">
+        <li>${whale}</li>
+        ${key.map(x => `<li><b>${x.name}</b> ${x.lo != null ? (x.lo === x.hi ? px(x.lo) : px(x.lo) + '–' + px(x.hi)) : ''}: <span class="stag sg-${x.f.st}">${x.f.st === 'ok' ? '✓' : x.f.st === 'bad' ? '✕' : '…'} ${x.f.txt}</span></li>`).join('')}
+        ${aft ? `<li>Giá đóng các nến sau: ${aft}</li>` : ''}
+        ${outcome}
+      </ul>`;
+  }
+
+  // ---------------------------------------------------------------- ② thang giá + vòng đời
+  function drawLadder() {
+    const b = BARS.find(x => x.k === F.i);
+    if (!b) { $('fe-ladder').innerHTML = ''; $('fe-lsigs').innerHTML = ''; return; }
+    const lv = levels(b), mx = Math.max(1, ...b.lv.map(r => Math.max(r[1], r[2])));
+    const imb = new Set(b.imb.map(([p, s]) => s + p.toFixed(3)));
+    const statusAt = p => lv.filter(x => x.lo != null && p >= x.lo - 1e-9 && p <= x.hi + 1e-9)
+      .map(x => `<span class="stag sg-${x.f.st}" title="${x.name}: ${x.f.txt}">${x.kind.startsWith('absorb') ? '◆' : x.kind.startsWith('stack') ? '≡' : '▽'} ${x.f.st === 'ok' ? '✓ giữ' : x.f.st === 'bad' ? '✕ ' + x.f.txt.replace('bị ', '') : '… chưa test'}</span>`).join(' ');
+    const closeP = b.lv.reduce((a, r) => Math.abs(r[0] - b.c) < Math.abs(a - b.c) ? r[0] : a, b.lv[0][0]);
+    let h = '<table class="fp"><tr><th style="text-align:left">Giá</th><th>Bán</th><th>bán × mua</th><th style="text-align:left">Mua</th><th>Delta</th><th style="text-align:left">Trạng thái</th></tr>';
+    for (const [p, sl, by] of b.lv) {
+      const iS = imb.has('s' + p.toFixed(3)), iB = imb.has('b' + p.toFixed(3));
+      h += `<tr class="${eq(p, b.poc) ? 'poc' : ''}"><td class="p">${px(p)}${eq(p, closeP) ? ' <span class="gold" title="giá đóng">◀</span>' : ''}${eq(p, b.poc) ? ' •' : ''}</td>` +
+        `<td class="bar ${iS ? 'imbS' : ''}"><div class="bs" style="width:${sl / mx * 100}%"></div></td>` +
+        `<td><span class="neg">${fmt(sl)}</span> × <span class="pos">${fmt(by)}</span></td>` +
+        `<td class="bar ${iB ? 'imbB' : ''}"><div class="bb" style="width:${by / mx * 100}%"></div></td>` +
+        `<td class="${by - sl >= 0 ? 'pos' : 'neg'}">${sgn(by - sl)}</td><td class="st">${statusAt(p)}</td></tr>`;
+    }
+    $('fe-ladder').innerHTML = h + '</table><div class="legend"><span>◀ giá đóng</span><span>• POC</span><span><i style="background:var(--buy-soft)"></i>imbalance mua ≥3×</span><span><i style="background:var(--sell-soft)"></i>imbalance bán ≥3×</span></div>';
+    // dấu hiệu tách 2 phe
+    const card = x => `<div class="sig"><b>${x.name}</b>${x.txt}${x.f ? `<br><span class="stag sg-${x.f.st}">${x.f.st === 'ok' ? '✓' : x.f.st === 'bad' ? '✕' : '…'} ${x.f.txt}</span>` : ''}</div>`;
+    const up = lv.filter(x => x.side === 'up'), dn = lv.filter(x => x.side === 'down');
+    const alive = a => a.filter(x => !x.f || x.f.st !== 'bad').length;
+    const nu = alive(up), nd = alive(dn);
+    const sum = !lv.length ? 'Nến không có dấu hiệu theo mức giá.' :
+      `Còn hiệu lực: <b class="pos">${nu} ủng hộ tăng</b> · <b class="neg">${nd} ủng hộ giảm</b> → ` +
+      (nu > nd ? '<b class="pos">nghiêng TĂNG</b>' : nd > nu ? '<b class="neg">nghiêng GIẢM</b>' : '<b>cân bằng</b>') +
+      (lv.some(x => x.f && x.f.st === 'bad') ? ` (đã loại ${lv.filter(x => x.f && x.f.st === 'bad').length} dấu hiệu bị phá)` : '');
+    $('fe-lsigs').innerHTML = `<div class="cols"><div class="col"><h4 class="pos">Ủng hộ tăng</h4>${up.map(card).join('') || '<div class="sig note">không có</div>'}</div>` +
+      `<div class="col"><h4 class="neg">Ủng hộ giảm</h4>${dn.map(card).join('') || '<div class="sig note">không có</div>'}</div></div><div class="sum">${sum}</div>`;
+  }
+
+  // ---------------------------------------------------------------- ④ ma trận
+  function drawQuad() {
+    const host = $('fe-quad'); host.innerHTML = '';
+    const W = Math.max(320, host.clientWidth), H = Math.round(Math.min(360, Math.max(240, W * .42))), L = 40, R = 10, T = 10, B = 28;
+    const mx = Math.max(F.thr * 1.5, ...BARS.map(b => Math.abs(b.E))) * 1.1;
+    const X = v => L + (v + mx) / (2 * mx) * (W - L - R), Y = v => T + (1.1 - v) / 2.2 * (H - T - B);
+    const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Ma trận nỗ lực và kết quả các nến'}, host);
+    const zone = (x0, x1, y0, y1, c, t, ax, ay, an) => { el('rect', {x: X(x0), y: Y(y1), width: X(x1) - X(x0), height: Y(y0) - Y(y1), fill: c, opacity: .08}, s);
+      el('text', {x: ax, y: ay, 'text-anchor': an, style: `fill:${c};font-weight:600;opacity:.9`}, s, t); };
+    zone(F.thr, mx, 0, 1.1, 'var(--buy)', 'mua có kết quả', W - R - 4, T + 12, 'end');
+    zone(F.thr, mx, -1.1, 0, 'var(--warn)', 'mua bị hấp thụ', W - R - 4, H - B - 5, 'end');
+    zone(-mx, -F.thr, 0, 1.1, 'var(--vwap)', 'bán bị hấp thụ', L + 4, T + 12, 'start');
+    zone(-mx, -F.thr, -1.1, 0, 'var(--sell)', 'bán có kết quả', L + 4, H - B - 5, 'start');
+    el('line', {x1: X(0), x2: X(0), y1: T, y2: H - B, stroke: 'var(--line2)'}, s);
+    el('line', {x1: L, x2: W - R, y1: Y(0), y2: Y(0), stroke: 'var(--line2)'}, s);
+    for (const v of [-F.thr, F.thr]) el('line', {x1: X(v), x2: X(v), y1: T, y2: H - B, stroke: 'var(--gold3)', 'stroke-dasharray': '2 4'}, s);
+    for (const v of [-1, 1]) el('text', {x: L - 4, y: Y(v) + 3, 'text-anchor': 'end'}, s, v > 0 ? 'đỉnh' : 'đáy');
+    el('text', {x: W - R, y: H - 4, 'text-anchor': 'end'}, s, 'nỗ lực: delta % KL so TB phiên (điểm) →');
+    el('text', {x: X(-F.thr), y: H - B + 12, 'text-anchor': 'middle'}, s, s1(-F.thr));
+    el('text', {x: X(F.thr), y: H - B + 12, 'text-anchor': 'middle'}, s, s1(F.thr));
+    for (const b of BARS) {
+      const on = b.k === F.i, r = 3 + Math.min(6, b.rel * 2.5);
+      const g = el('g', {style: 'cursor:pointer'}, s);
+      el('circle', {cx: X(b.E), cy: Y(b.CL), r: on ? r + 3 : r, fill: LAB[b.lab][1], stroke: on ? 'var(--gold2)' : '#0B1628', 'stroke-width': on ? 2.5 : 1, opacity: on ? 1 : .85}, g);
+      if (on || W > 700) el('text', {x: X(b.E) + r + 3, y: Y(b.CL) - r, style: `fill:${on ? 'var(--gold2)' : 'var(--dim)'};font-size:${on ? 11.5 : 9.5}px;font-weight:${on ? 700 : 400}`}, g, b.t);
+      el('title', {}, g, `${b.t}: ${LAB[b.lab][0]} · nỗ lực ${s1(b.E)} · KL ${b.rel.toFixed(1)}× TB`);
+      g.addEventListener('click', () => { select(b.k); });
+    }
+  }
+
+  // ---------------------------------------------------------------- 🐋 cá mập trong phiên
+  // phía CHỦ ĐỘNG tạo ra dấu hiệu: xếp chồng bán / hấp thụ lệnh bán / cạn kiệt bán đều do bên bán chủ động
+  const AGG = {stack_s: 's', absorb_b: 's', exh_b: 's', stack_b: 'b', absorb_s: 'b', exh_s: 'b'};
+  const SN = {absorb_b: ['◆', 'Hấp thụ lệnh bán', 'var(--buy)'], absorb_s: ['◆', 'Hấp thụ lệnh mua', 'var(--sell)'],
+    fail_b: ['✕', 'Hấp thụ mua thất bại', 'var(--sell)'], fail_s: ['✕', 'Hấp thụ bán thất bại', 'var(--buy)'],
+    div_b: ['⚠', 'Phân kỳ đáy', 'var(--buy)'], div_s: ['⚠', 'Phân kỳ đỉnh', 'var(--sell)'],
+    exh_b: ['▽', 'Cạn kiệt bán', 'var(--buy)'], exh_s: ['△', 'Cạn kiệt mua', 'var(--sell)'],
+    stack_b: ['≡', 'Imbalance mua xếp chồng', 'var(--buy)'], stack_s: ['≡', 'Imbalance bán xếp chồng', 'var(--sell)']};
+  const pc0 = v => Math.round(v) + ' %';
+
+  function whaleZones() {
+    const out = [];
+    for (const b of BARS) for (const z of levels(b)) {
+      if (z.lo == null || !AGG[z.kind]) continue;
+      const ag = AGG[z.kind], inZ = p => p >= z.lo - 1e-9 && p <= z.hi + 1e-9;
+      let vs = 0, vb = 0;
+      for (const [p, s, bu] of b.lv) if (inZ(p)) { vs += s; vb += bu; }
+      let ws = null, wb = null;
+      if (b.blv) { ws = 0; wb = 0; for (const [p, s, bu] of b.blv) if (inZ(p)) { ws += s; wb += bu; } }
+      const av = ag === 's' ? vs : vb, aw = ws == null ? null : ag === 's' ? ws : wb;
+      const share = aw == null || !av ? null : aw / av * 100;
+      const absorb = z.kind.startsWith('absorb') || z.kind.startsWith('exh');
+      const st = z.f.st;
+      // kết quả nỗ lực của phía chủ động: vùng xếp chồng còn giữ = thắng; mức hấp thụ/cạn kiệt bị xuyên qua = bên chủ động thắng
+      const win = absorb ? (st === 'bad' ? true : z.f.txt === 'nến cuối phiên' ? null : false) : st !== 'bad';
+      const endK = z.f.at ? z.f.at.k : st === 'bad' ? b.k : null;
+      out.push({...z, k: b.k, t: b.t, ag, vs, vb, ws, wb, av, share, whale: share != null && share >= 50, absorb, win, endK, endT: z.f.at ? z.f.at.t : null});
+    }
+    return out;
+  }
+
+  function drawScore(Z) {
+    const host = $('fe-score');
+    if (!BARS.some(b => b.bb || b.bs)) { host.innerHTML = '<p class="note">Phiên này không có lệnh cá mập nào (lệnh ≥ 500 tr đ).</p>'; return; }
+    if (!BARS.some(b => b.blv)) { host.innerHTML = '<p class="note">Phiên này chưa lưu cá mập theo mức giá (có từ 25/09/2026).</p>'; return; }
+    const W = Z.filter(z => z.whale), R = Z.filter(z => !z.whale);
+    const cell = z => {
+      const side = z.ag === 's' ? 'bán' : 'mua', g = SN[z.kind][0];
+      const res = z.win == null ? ['open', '…', 'cuối phiên'] : z.win ? ['win', '✓', z.absorb ? `xuyên qua ${z.endT}` : 'giữ'] : ['lose', '✕', z.absorb ? 'bị đỡ lại' : `phá ${z.endT || 'ngay'}`];
+      return `<span class="cell ${res[0]}" title="${SN[z.kind][1]} ${px(z.lo)}${z.hi !== z.lo ? '–' + px(z.hi) : ''} · cá mập ${side} ${pc0(z.share)}"><b>${res[1]} ${g}</b>${z.t}<span>${side} ${pc0(z.share)}</span><span>${res[2]}</span></span>`;
+    };
+    const half = (lab, arr) => {
+      const dec = arr.filter(z => z.win != null), w = dec.filter(z => z.win).length;
+      const v = !arr.length ? '<span class="note">cá mập không ra tay</span>' : !dec.length ? '<span class="note">chưa rõ</span>' :
+        w / dec.length >= 2 / 3 ? `<span class="sc-v pos">${w}/${dec.length} → nỗ lực ĐẠT</span>` : w / dec.length <= 1 / 3 ? `<span class="sc-v neg">${w}/${dec.length} → KHÔNG ĐẠT</span>` : `<span class="sc-v" style="color:var(--warn)">${w}/${dec.length} → lẫn lộn</span>`;
+      return `<div class="sc-row"><span class="lb">${lab}</span>${arr.map(cell).join('')}${v}</div>`;
+    };
+    const am = W.filter(z => z.t < '12:00'), pm = W.filter(z => z.t >= '12:00');
+    const cnt = s => { const a = W.filter(z => z.ag === s), d = a.filter(z => z.win != null); return a.length ? `${a.length} lần: <b class="pos">✓ ${d.filter(z => z.win).length}</b> · <b class="neg">✕ ${d.filter(z => !z.win).length}</b>` : '0 lần'; };
+    const losses = W.filter(z => z.win === false && z.endT).map(z => z.endT);
+    host.innerHTML = `<div class="big-line">Cá mập <b class="neg">BÁN</b> ra tay ${cnt('s')} &nbsp;·&nbsp; Cá mập <b class="pos">MUA</b> ra tay ${cnt('b')}</div>` +
+      half('Sáng', am) + half('Chiều', pm) +
+      (losses.length ? `<p class="hint" style="margin:4px 0 0">Vùng cá mập bị phá lúc: <b class="gold">${[...new Set(losses)].sort().join(', ')}</b>: thời điểm cá mập mất kiểm soát giá.</p>` : '') +
+      (R.length ? `<div class="sc-row"><span class="lb">Nhỏ lẻ</span>${R.map(cell).join('').replace(/cell (win|lose|open)/g, 'cell retail')}<span class="note">dấu hiệu do nhỏ lẻ (cá mập &lt; 50 %), không tính điểm</span></div>` : '');
+  }
+
+  // trục ngang chung của bản đồ và đường nỗ lực: cột theo nến
+  function wGeom(host) {
+    const W = Math.max(320, host.clientWidth), L = 40, R = 26, cw = (W - L - R) / BARS.length;
+    const idx = new Map(BARS.map((b, j) => [b.k, j]));
+    return {W, L, R, cw, idx, cx: k => L + cw * (idx.get(k) + .5)};
+  }
+  function drawZoneMap(Z) {
+    const host = $('fe-map'); host.innerHTML = '';
+    const g = wGeom(host), {W, L, R, cw, cx} = g, H = 300, T = 8, B = 22;
+    const step = tickSize(BARS[0].h, EX);
+    const lo = Math.min(...BARS.map(b => b.l)) - step, hi = Math.max(...BARS.map(b => b.h)) + step;
+    const y = p => T + (hi - p) / (hi - lo) * (H - T - B);
+    const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Bản đồ vùng dấu hiệu và phần cá mập'}, host);
+    const gs = Math.max(1, Math.round((hi - lo) / step / 7)) * step;
+    for (let p = Math.ceil(lo / gs) * gs; p <= hi; p += gs) {
+      el('line', {x1: L, x2: W - R, y1: y(p), y2: y(p), stroke: 'var(--grid)'}, s);
+      el('text', {x: L - 4, y: y(p) + 3, 'text-anchor': 'end'}, s, px(+p.toFixed(2)));
+    }
+    const pm = BARS.findIndex(b => b.t >= '12:00');
+    if (pm > 0) {
+      const x = L + cw * pm;
+      el('line', {x1: x, x2: x, y1: T, y2: H - B, stroke: 'var(--line2)', 'stroke-dasharray': '4 4'}, s);
+      el('text', {x: x - 4, y: T + 10, 'text-anchor': 'end', style: 'fill:var(--gold3)'}, s, 'sáng');
+      el('text', {x: x + 4, y: T + 10, style: 'fill:var(--gold3)'}, s, 'chiều');
+    }
+    // nến nền
+    BARS.forEach(b => {
+      const x = cx(b.k), col = b.c >= b.o ? 'rgba(61,190,122,.55)' : 'rgba(229,87,92,.55)';
+      if (b.k === F.i) el('rect', {x: x - cw / 2, y: T, width: cw, height: H - T - B, fill: 'rgba(212,175,106,.09)'}, s);
+      el('line', {x1: x, x2: x, y1: y(b.h), y2: y(b.l), stroke: col}, s);
+      el('rect', {x: x - Math.min(5, cw * .18), y: y(Math.max(b.o, b.c)), width: Math.min(10, cw * .36), height: Math.max(1.5, Math.abs(y(b.o) - y(b.c))), fill: col}, s);
+      if (cw > 34 || BARS.indexOf(b) % 2 === 0) el('text', {x, y: H - 6, 'text-anchor': 'middle', style: 'font-size:10px'}, s, b.t);
+    });
+    // dải: vẽ vùng nhỏ lẻ trước, vùng cá mập sau (nằm trên)
+    const sorted = [...Z].sort((a, b) => (a.whale ? 1 : 0) - (b.whale ? 1 : 0));
+    for (const z of sorted) {
+      const col = z.ag === 's' ? 'var(--sell)' : 'var(--buy)';
+      const x1 = cx(z.k) - cw * .3, x2 = z.endK != null ? cx(z.endK) : W - R;
+      const gz = el('g', {style: 'cursor:pointer'}, s);
+      const tip = `${z.t} ${SN[z.kind][1]} ${px(z.lo)}${z.hi !== z.lo ? '–' + px(z.hi) : ''}\n` +
+        `KL ở vùng: bán ${fmt(z.vs)} · mua ${fmt(z.vb)}` + (z.ws != null ? `\ncá mập: bán ${fmt(z.ws)} · mua ${fmt(z.wb)} → ${z.ag === 's' ? 'bán' : 'mua'} ${pc0(z.share)}` : '') +
+        `\n${z.f.txt}`;
+      if (z.lo === z.hi) {
+        el('line', {x1, x2, y1: y(z.lo), y2: y(z.lo), stroke: col, 'stroke-width': z.whale ? 2.5 : 1.2, 'stroke-dasharray': z.whale ? '' : '3 3'}, gz);
+        el('text', {x: x1 - 2, y: y(z.lo) + 4, 'text-anchor': 'end', style: `fill:${col};font-size:12px`}, gz, SN[z.kind][0]);
+      } else {
+        const yt = y(z.hi + step / 2), yb = y(z.lo - step / 2);
+        el('rect', {x: x1, y: yt, width: Math.max(2, x2 - x1), height: yb - yt, fill: col, 'fill-opacity': z.whale ? .38 : .06,
+          stroke: col, 'stroke-opacity': z.whale ? .9 : .7, 'stroke-dasharray': z.whale ? '' : '3 3', rx: 2}, gz);
+      }
+      const ym = y((z.lo + z.hi) / 2);
+      el('text', {x: x1 + 3, y: ym + 3.5, style: 'font-size:10px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, gz,
+        (z.whale ? '🐋' + pc0(z.share).replace(' ', '') : ''));
+      if (z.endK != null) el('text', {x: x2, y: ym + 4, 'text-anchor': 'middle', style: 'font-size:13px;font-weight:800;fill:#FFD1D1;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, gz, '✕');
+      else el('text', {x: W - R + 4, y: ym + 4, style: `font-size:12px;font-weight:800;fill:${z.whale ? '#9BF2C2' : 'var(--dim)'}`}, gz, '✓');
+      el('title', {}, gz, tip);
+      gz.addEventListener('click', () => { select(z.k); });
+    }
+    // giá đóng nối lại, nằm trên cùng
+    el('path', {d: BARS.map((b, j) => (j ? 'L' : 'M') + cx(b.k).toFixed(1) + ' ' + y(b.c).toFixed(1)).join(''), fill: 'none', stroke: 'var(--ink)', 'stroke-width': 1.4, opacity: .85}, s);
+  }
+
+  function drawWhaleVsPrice() {
+    const host = $('fe-vp'); host.innerHTML = '';
+    if (!BARS.some(b => b.bb || b.bs)) { $('fe-eff').textContent = ''; return; }
+    const g = wGeom(host), {W, L, R, cw, cx} = g, H = 190, T = 16, B = 8;
+    const act = BARS.reduce((a, b) => a + b.buy + b.sell, 0) || 1, o0 = BARS[0].o;
+    let acc = 0;
+    const rows = BARS.map((b, j) => {
+      const wn = (b.bb - b.bs) / act * 100; acc += wn;
+      const prev = j ? BARS[j - 1].c : o0;
+      return {b, wn, cv: acc, pp: (b.c / o0 - 1) * 100, dp: b.c - prev};
+    });
+    // hai thang riêng nhưng cùng neo 0 ở giữa: so được chiều và độ dốc (CVD cá mập thường lớn gấp chục lần % giá)
+    const mP = Math.max(.3, ...rows.map(r => Math.abs(r.pp))) * 1.15, mC = Math.max(.5, ...rows.map(r => Math.max(Math.abs(r.cv), Math.abs(r.wn)))) * 1.15;
+    const yP = v => T + (mP - v) / (2 * mP) * (H - T - B), y = v => T + (mC - v) / (2 * mC) * (H - T - B);
+    const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'CVD cá mập và giá cùng thang phần trăm'}, host);
+    // tô nền lệch pha: cá mập ròng ≥ 1 % KL phiên mà giá nến đi ngược
+    const tick = tickSize(BARS[0].h, EX);
+    rows.forEach(r => {
+      if (Math.abs(r.wn) >= 1 && Math.abs(r.dp) >= tick - 1e-9 && Math.sign(r.dp) !== Math.sign(r.wn))
+        el('title', {}, el('rect', {x: cx(r.b.k) - cw / 2, y: T, width: cw, height: H - T - B, fill: 'var(--warn)', opacity: .16}, s),
+          `${r.b.t}: cá mập ròng ${s1(r.wn)} % KL phiên nhưng giá ${r.dp > 0 ? 'tăng' : 'giảm'}: lệch pha`);
+    });
+    el('line', {x1: L, x2: W - R, y1: y(0), y2: y(0), stroke: 'var(--line2)'}, s);
+    const gstep = mm => mm > 20 ? 10 : mm > 10 ? 5 : mm > 4 ? 2 : mm > 2 ? 1 : mm > 1 ? .5 : .2;
+    const gP = gstep(mP), gC = gstep(mC);
+    for (let v = -Math.floor(mP / gP) * gP; v <= mP + 1e-9; v += gP) if (Math.abs(v) > 1e-9) el('text', {x: L - 4, y: yP(v) + 3, 'text-anchor': 'end', style: 'fill:var(--ink)'}, s, s1(v) + '%');
+    for (let v = -Math.floor(mC / gC) * gC; v <= mC + 1e-9; v += gC) if (Math.abs(v) > 1e-9) el('text', {x: W - R + 2, y: y(v) + 3, style: 'fill:var(--gold2);font-size:9.5px'}, s, s1(v));
+    rows.forEach(r => {
+      const w = Math.min(10, cw * .3);
+      el('rect', {x: cx(r.b.k) - w / 2, y: Math.min(y(r.wn), y(0)), width: w, height: Math.max(1, Math.abs(y(r.wn) - y(0))), fill: r.wn >= 0 ? 'var(--buy)' : 'var(--sell)', opacity: .55, rx: 1}, s);
+    });
+    const path = (a, col, dash, wdt) => el('path', {d: rows.map((r, j) => (j ? 'L' : 'M') + cx(r.b.k).toFixed(1) + ' ' + y(a(r)).toFixed(1)).join(''), fill: 'none', stroke: col, 'stroke-width': wdt, 'stroke-dasharray': dash || ''}, s);
+    el('path', {d: rows.map((r, j) => (j ? 'L' : 'M') + cx(r.b.k).toFixed(1) + ' ' + yP(r.pp).toFixed(1)).join(''), fill: 'none', stroke: 'var(--ink)', 'stroke-width': 2}, s); path(r => r.cv, 'var(--gold2)', '', 2.2);
+    const last = rows[rows.length - 1];
+    el('text', {x: cx(last.b.k) - 6, y: yP(last.pp) - 6, 'text-anchor': 'end', style: 'fill:var(--ink);font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s, `giá ${s1(last.pp)} %`);
+    el('text', {x: cx(last.b.k) - 6, y: y(last.cv) + 14, 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s, `CVD CM ${s1(last.cv)} %`);
+    el('text', {x: L + 4, y: T - 3, style: 'fill:var(--mute)'}, s, W < 600 ? '— giá % (trái)  — CVD cá mập % (phải)  ▒ lệch pha' : '— giá % so giá mở (thang trái)   — CVD cá mập % KL chủ động cả phiên (thang phải)   ▮ cá mập ròng từng nến   ▒ lệch pha');
+    const pmI = BARS.findIndex(b => b.t >= '12:00');
+    if (pmI > 0) el('line', {x1: L + cw * pmI, x2: L + cw * pmI, y1: T, y2: H - B, stroke: 'var(--line2)', 'stroke-dasharray': '4 4'}, s);
+    // hiệu suất từng buổi
+    const seg = (a, lab) => {
+      if (!a.length) return '';
+      const i0 = rows.indexOf(a[0]), p0 = i0 ? rows[i0 - 1].b.c : o0, p1 = a[a.length - 1].b.c;
+      const sw = a.reduce((x, r) => x + r.wn, 0), dp = (p1 / p0 - 1) * 100;
+      const same = Math.abs(sw) < 1 ? null : Math.abs(dp) < .1 ? 'flat' : Math.sign(sw) === Math.sign(dp);
+      return `<b>${lab}</b>: cá mập ${sw >= 0 ? 'mua' : 'bán'} ròng ${Math.abs(sw).toLocaleString('vi-VN', {maximumFractionDigits: 1})} % KL phiên, giá ${s1(dp)} % → ` +
+        (same == null ? 'cá mập gần như đứng ngoài' : same === 'flat' ? '<b style="color:var(--warn)">giá không nhúc nhích</b>: nỗ lực bị hấp thụ hết' : same ? `<b class="pos">cùng chiều</b> (${s1(Math.abs(dp / sw))} % giá / 1 % KL)` : `<b class="neg">NGƯỢC chiều</b>: có bên hấp thụ`);
+    };
+    const am = rows.filter(r => r.b.t < '12:00'), pm = rows.filter(r => r.b.t >= '12:00');
+    $('fe-eff').innerHTML = [seg(am, 'Sáng'), seg(pm, 'Chiều')].filter(Boolean).join(' &nbsp;·&nbsp; ');
+  }
+
+  function drawSigList(Z) {
+    const sigs = D.tf[String(F.tf)].sigs || [];
+    if (!sigs.length) { $('fe-sigs').innerHTML = `<p class="note">${D.no_side ? 'Nguồn không có bên chủ động cho mã này — không đánh được dấu hiệu.' : 'Phiên này không có dấu hiệu nào vượt ngưỡng.'}</p>`; return; }
+    $('fe-sigs').innerHTML = sigs.map(sg => {
+      const [gl, nm, col] = SN[sg.kind] || ['•', sg.kind, 'var(--ink)'];
+      const z = Z.find(x => x.k === sg.i && x.kind === sg.kind);
+      let chips = '', note = '';
+      if (z) {
+        const side = z.ag === 's' ? 'bán' : 'mua';
+        chips += z.share == null ? '<span class="wchip dim">chưa có dữ liệu cá mập</span>' :
+          z.whale ? `<span class="wchip">🐋 ${side} ${pc0(z.share)}</span>` : `<span class="wchip dim">nhỏ lẻ · cá mập ${side} ${pc0(z.share)}</span>`;
+        chips += ` <span class="stag sg-${z.f.st}">${z.f.st === 'ok' ? '✓' : z.f.st === 'bad' ? '✕' : '…'} ${z.f.txt}</span>`;
+        if (z.absorb && z.whale && z.kind.startsWith('absorb'))
+          note = `Bên ${side} chủ động là cá mập (${pc0(z.share)}), bên đỡ là lệnh chờ (thường nhỏ lẻ): đây là cá mập ${side} bị chặn tạm, KHÔNG phải tín hiệu cá mập ${side === 'bán' ? 'mua' : 'bán'}.` +
+            (z.win ? ` Kết cục: cá mập thắng, mức bị xuyên lúc ${z.endT}.` : z.win === false ? ' Kết cục: bên đỡ giữ được.' : '');
+      }
+      return `<div class="wsig"><span class="tm" data-k="${sg.i}">${sg.t}</span><span><b style="color:${col}">${gl} ${nm}</b>. ${esc(sg.text)}</span>` +
+        (chips ? `<div class="chips2">${chips}</div>` : '') + (note ? `<div class="wnote">${note}</div>` : '') + '</div>';
+    }).join('');
+    $('fe-sigs').querySelectorAll('.tm').forEach(t => t.onclick = () => {
+      select(+t.dataset.k);
+      if (innerWidth <= 860) $('fe-verdict').scrollIntoView({behavior: 'smooth', block: 'start'});
+    });
+  }
+
+  function drawWhale() {
+    const Z = whaleZones();
+    drawScore(Z); drawZoneMap(Z); drawWhaleVsPrice(); drawSigList(Z);
+  }
+
+  const ready = () => BARS.length > 0;
+  return {
+    // gọi mỗi khi đổi mã/phiên/khung (showTF), trước select()
+    prep() { F.tf = TF; EX = D.ex || 'HOSE'; prep(); },
+    draw() {
+      F.i = sel;
+      $('fe-thr').value = F.thr; $('fe-thr-v').textContent = F.thr;
+      if (!ready()) { ['fe-score', 'fe-map', 'fe-vp', 'fe-eff', 'fe-sigs', 'fe-strip', 'fe-legend', 'fe-verdict', 'fe-ladder', 'fe-lsigs', 'fe-quad'].forEach(id => { $(id).innerHTML = ''; }); return; }
+      drawWhale(); drawStrip(); drawVerdict(); drawLadder(); drawQuad();
+    },
+    setThr(v) { F.thr = v; LS.set('of.fe.thr', v); prep(); this.draw(); },
+  };
+})();
+$('fe-thr').oninput = e => FE.setThr(+e.target.value);
 
 // ---------------------------------------------------------------- ③ Nhiều phiên
 async function renderDays() {

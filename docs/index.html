@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=7">
+<link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
 <header class="top">
@@ -34,11 +34,65 @@
     <div class="ctrl"><select id="d-sym" aria-label="Mã"></select><select id="d-date" aria-label="Phiên"></select>
       <span class="pill" id="d-pill"></span></div>
     <div class="tiles t7" id="d-tiles"></div>
+    <div class="fe-ctl">
+      <div class="chips tf" id="d-tf" role="group" aria-label="Khung nến" style="margin:0"></div>
+      <label title="Nỗ lực mạnh khi delta % KL của nến lệch khỏi trung bình phiên ít nhất ngần này điểm">Ngưỡng nỗ lực
+        <input type="range" id="fe-thr" min="5" max="40" step="1" value="15"> <b id="fe-thr-v" class="gold">15</b></label>
+    </div>
+
+    <div class="fe">
+      <h2 class="sec">🐋 Cá mập trong phiên</h2>
+      <div class="card">
+        <h3><span class="num">A</span>Bảng điểm cá mập</h3>
+        <p class="hint">Mỗi ô là một lần cá mập <b>ra tay</b> tạo dấu hiệu (cá mập chiếm ≥ 50 % khối lượng phía chủ động ở vùng đó), xếp theo giờ.
+          <span class="stag sg-ok">✓</span> nỗ lực có kết quả, <span class="stag sg-bad">✕</span> bị thị trường phủ nhận (kèm giờ).</p>
+        <div id="fe-score"></div>
+      </div>
+      <div class="card">
+        <h3><span class="num">B</span>Bản đồ vùng cá mập</h3>
+        <p class="hint">Mỗi dấu hiệu là một dải ngang, kéo từ nến sinh ra nó tới khi <b>bị phá (✕)</b> hoặc tới cuối phiên <b>(✓)</b>. Đỏ = phía bán chủ động, xanh = phía mua.
+          <b>Tô đặc + 🐋</b> = cá mập ≥ 50 %; viền đứt = chủ yếu nhỏ lẻ. Đường có ◆ là mức hấp thụ. Chạm vào dải để xem nến sinh ra nó.</p>
+        <div id="fe-map"></div>
+        <div id="fe-vp"></div>
+        <p class="hint" id="fe-eff" style="margin-top:6px"></p>
+      </div>
+      <div class="card bronze">
+        <h3><span class="num">C</span>Dấu hiệu trong phiên</h3>
+        <p class="hint" style="color:#E7D6B5">Mỗi dòng có phần của cá mập ở vùng đó và kết cục (✓ giữ / ✕ bị phá). Chạm giờ để xem nến.</p>
+        <div id="fe-sigs"></div>
+      </div>
+
+      <h2 class="sec">Nến đang chọn</h2>
+      <div class="card">
+        <h3><span class="num">D</span>Cả phiên: nến nào nỗ lực không ra kết quả</h3>
+        <p class="hint">Trên: nến giá, vòng tròn = nến "bị hấp thụ". Giữa: cột vàng = nỗ lực (delta so TB phiên), cột trắng = kết quả (giá đóng ở đâu trong nến). Dưới: nhãn. Chạm vào nến để chọn.</p>
+        <div id="fe-strip"></div>
+        <div class="legend" id="fe-legend"></div>
+      </div>
+      <div class="card">
+        <h3><span class="num">E</span>Phán quyết nến đang chọn</h3>
+        <div id="fe-verdict"></div>
+      </div>
+      <div class="card">
+        <h3><span class="num">F</span>Thang giá và vòng đời dấu hiệu</h3>
+        <p class="hint">Cột cuối: mức/vùng dấu hiệu <b>đã được xác nhận hay bị phá</b> ở các nến sau: <span class="stag sg-ok">✓ giữ được</span> <span class="stag sg-bad">✕ bị phá</span> <span class="stag sg-wait">… chưa test</span></p>
+        <div class="grid2">
+          <div style="overflow-x:auto;min-width:0"><div id="fe-ladder"></div></div>
+          <div id="fe-lsigs"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="num">G</span>Ma trận nỗ lực × kết quả các nến</h3>
+        <p class="hint">Ngang = nỗ lực (delta % KL so TB phiên), dọc = giá đóng ở đâu trong nến (+1 đỉnh, −1 đáy). Góc <b style="color:var(--vwap)">trên-trái</b> là bán bị hấp thụ, <b style="color:var(--warn)">dưới-phải</b> là mua bị hấp thụ.</p>
+        <div id="fe-quad"></div>
+      </div>
+    </div>
+
+    <h2 class="sec">Nến · delta · CVD và footprint</h2>
     <div class="grid2">
       <div>
         <div class="card" id="chartcard">
           <h3><span class="num">1</span>Nến <span id="d-tfname">15 phút</span> · delta · CVD</h3>
-          <div class="chips tf" id="d-tf" role="group" aria-label="Khung nến"></div>
           <p class="hint">Chạm vào một nến để xem footprint. Delta = mua chủ động − bán chủ động. CVD = delta cộng dồn từ đầu phiên. Đường tím là VWAP: giá khớp bình quân theo KL từ đầu phiên, không tính ATO/ATC.</p>
           <div id="d-chart"></div>
           <div class="legend">
@@ -50,10 +104,6 @@
             <span><i>⚠</i> phân kỳ</span><span><i>▽△</i> cạn kiệt</span>
             <span><span class="sw" style="background:var(--vwap)"></span>VWAP, dải ±1σ tô nhạt, ±2σ nét đứt</span>
           </div>
-        </div>
-        <div class="card bronze" id="sigcard">
-          <h3><span class="num">3</span>Dấu hiệu trong phiên</h3>
-          <ul class="siglist" id="d-sigs"></ul>
         </div>
       </div>
       <div class="card" id="fpcard">
@@ -254,6 +304,23 @@
         <li>Đây là bản đồ mô tả. Các lần đo trước chưa thấy delta/cá mập dự báo được giá.</li>
       </ul>
     </div>
+    <div class="card">
+      <h3><span class="num">6</span>Đọc tab Trong phiên: cá mập, nỗ lực và kết quả</h3>
+      <p class="hint">Trả lời câu hỏi: lực mua/bán chủ động, nhất là của cá mập, có đẩy được giá không. <a href="#day" class="gold">Mở tab Trong phiên</a></p>
+      <dl class="defs">
+        <dt class="gold">Nỗ lực</dt><dd>Delta ÷ KL chủ động của nến, trừ mức trung bình cả phiên của chính mã. <span>Tick VN lệch về phía bán nên −30 % có khi chỉ là bình thường.</span></dd>
+        <dt>Kết quả</dt><dd>Giá đóng nằm ở đâu trong nến (−1 đáy … +1 đỉnh), kèm số bước giá đóng − mở.</dd>
+        <dt style="color:var(--vwap)">Bán bị hấp thụ</dt><dd>Bán chủ động mạnh mà giá đóng nửa trên. <span>Mua bị hấp thụ là chiều ngược lại.</span></dd>
+        <dt>✓ / ✕</dt><dd>Vòng đời dấu hiệu trong phiên: vùng xếp chồng bị phá khi có nến ĐÓNG qua mép vùng; mức hấp thụ bị phá khi giá thủng/vượt mức đó.</dd>
+        <dt>🐋 %</dt><dd>Phần của lệnh ≥ 500 tr đ trong khối lượng phía chủ động ở đúng vùng giá của dấu hiệu. <span>≥ 50 % mới tính là cá mập ra tay. Có từ phiên 25/09/2026.</span></dd>
+      </dl>
+      <ul class="plain">
+        <li><b>Bảng điểm A:</b> vùng xếp chồng của cá mập còn giữ = cá mập thắng; mức hấp thụ bị cá mập xuyên qua = cá mập thắng. Tách sáng/chiều vì câu chuyện hay đổi sau nghỉ trưa.</li>
+        <li><b>"Hấp thụ lệnh bán" mà 🐋 bán 95 %</b>: bên bán là cá mập, bên đỡ là lệnh chờ. Đó là cá mập bị chặn tạm, không phải tín hiệu cá mập mua.</li>
+        <li><b>Đường giá vs CVD cá mập (thẻ B)</b>: hai thang riêng cùng neo 0. Đoạn tô nền = cá mập ròng mạnh mà giá đi ngược.</li>
+        <li>Đây là bản đồ mô tả, không phải tín hiệu mua bán. "Giữ/phá" là thứ nên đo lại khi kho đủ dài.</li>
+      </ul>
+    </div>
   </section>
 </div>
 
@@ -265,7 +332,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 <script>
 if ('serviceWorker' in navigator) {
   // Bản mới tiếp quản (skipWaiting + claim) → tải lại một lần để thấy ngay, không phải mở app hai lần
