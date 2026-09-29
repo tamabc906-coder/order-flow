@@ -360,7 +360,9 @@ document.addEventListener('keydown', e => {
 // Nến đang chọn dùng chung `sel` của app: bấm ở đâu cũng gọi select(i); select() gọi FE.draw().
 const FE = (() => {
   const F = {tf: 15, i: null, thr: +LS.get('of.fe.thr') || 15};
-  let BARS = [], BASE_SH = 0, AVG_V = 1, EX = 'HOSE';
+  // ATC = nến khớp định kỳ cuối phiên (giá đóng cửa thật); không có bên chủ động nên không vào nỗ lực/kết quả,
+  // nhưng vòng đời vùng và đường giá phải xét tới nó (TCB 29/09: vùng bán CM 32,4–32,45 "giữ" tới 14:30, ATC khớp 32,6).
+  let BARS = [], BASE_SH = 0, AVG_V = 1, EX = 'HOSE', ATC = null;
   const s1 = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString('vi-VN', {maximumFractionDigits: 1});
   const tickSize = (p, ex) => (ex || 'HOSE').toUpperCase() !== 'HOSE' ? .1 : p < 10 ? .01 : p < 50 ? .05 : .1;
   const eq = (a, b) => Math.abs(a - b) < 1e-6;
@@ -376,7 +378,9 @@ const FE = (() => {
 
   // ---------------------------------------------------------------- tính nỗ lực / kết quả từng nến
   function prep() {
-    BARS = D.tf[String(F.tf)].bars.map((b, k) => ({...b, k})).filter(b => !b.auction);
+    const allB = D.tf[String(F.tf)].bars, ai = allB.findIndex(b => b.t === 'ATC');
+    ATC = ai >= 0 && allB[ai].c ? {...allB[ai], k: ai} : null;
+    BARS = allB.map((b, k) => ({...b, k})).filter(b => !b.auction);
     const act = BARS.reduce((a, b) => a + b.buy + b.sell, 0) || 1;
     BASE_SH = BARS.reduce((a, b) => a + b.d, 0) / act * 100;
     AVG_V = act / (BARS.length || 1);
@@ -399,21 +403,24 @@ const FE = (() => {
   function levels(b) {
     const out = [], step = tickSize(b.h, EX), after = BARS.filter(x => x.k > b.k);
     const lowRow = b.lv[b.lv.length - 1], highRow = b.lv[0];
-    const fate = (brk, test) => {
+    // atcBrk(giá ATC) = vùng bị phá ở phiên ATC khi các nến liên tục chưa phá
+    const fate = (brk, test, atcBrk) => {
       const j = after.find(brk);
       if (j) return {st: 'bad', txt: `bị phá lúc ${j.t}`, at: j};
+      if (ATC && atcBrk(ATC.c)) return {st: 'bad', txt: `bị phá ở ATC ${px(ATC.c)}`, at: ATC};
       const n = after.filter(test).length;
-      return n ? {st: 'ok', txt: `giữ được (test ${n} lần)`} : {st: 'wait', txt: after.length ? 'chưa test lại' : 'nến cuối phiên'};
+      if (n) return {st: 'ok', txt: `giữ được (test ${n} lần${ATC ? ', qua ATC' : ''})`};
+      return after.length ? {st: 'wait', txt: 'chưa test lại'} : ATC ? {st: 'ok', txt: 'giữ qua ATC'} : {st: 'wait', txt: 'nến cuối phiên'};
     };
     for (const kind of b.sig) {
       if (kind === 'absorb_b') {
         const p = lowRow[1] >= .4 * b.vol ? lowRow[0] : b.l;
         out.push({kind, side: 'up', lo: p, hi: p, name: 'Hấp thụ lệnh bán', txt: `Mức đỡ ${px(p)}: bán dồn mà giá không thủng.`,
-          f: fate(x => x.l < p - 1e-9, x => x.l <= p + step + 1e-9)});
+          f: fate(x => x.l < p - 1e-9, x => x.l <= p + step + 1e-9, c => c < p - 1e-9)});
       } else if (kind === 'absorb_s') {
         const p = highRow[2] >= .4 * b.vol ? highRow[0] : b.h;
         out.push({kind, side: 'down', lo: p, hi: p, name: 'Hấp thụ lệnh mua', txt: `Mức chặn ${px(p)}: mua dồn mà giá không vượt.`,
-          f: fate(x => x.h > p + 1e-9, x => x.h >= p - step - 1e-9)});
+          f: fate(x => x.h > p + 1e-9, x => x.h >= p - step - 1e-9, c => c > p + 1e-9)});
       } else if (kind === 'stack_b' || kind === 'stack_s') {
         const sd = kind === 'stack_b' ? 'b' : 's';
         const ps = b.imb.filter(r => r[1] === sd).map(r => r[0]).sort((a, c) => a - c);
@@ -424,18 +431,18 @@ const FE = (() => {
         if (sd === 's') {
           const inCandle = b.c > hi + 1e-9;
           out.push({kind, side: 'down', lo, hi, name: `Imbalance bán xếp chồng ${best.length} ô`, txt: `Vùng kháng cự ${px(lo)}–${px(hi)}.`,
-            f: inCandle ? {st: 'bad', txt: 'bị vượt ngay trong nến'} : fate(x => x.c > hi + 1e-9, x => x.h >= lo - 1e-9)});
+            f: inCandle ? {st: 'bad', txt: 'bị vượt ngay trong nến'} : fate(x => x.c > hi + 1e-9, x => x.h >= lo - 1e-9, c => c > hi + 1e-9)});
         } else {
           const inCandle = b.c < lo - 1e-9;
           out.push({kind, side: 'up', lo, hi, name: `Imbalance mua xếp chồng ${best.length} ô`, txt: `Vùng hỗ trợ ${px(lo)}–${px(hi)}.`,
-            f: inCandle ? {st: 'bad', txt: 'bị thủng ngay trong nến'} : fate(x => x.c < lo - 1e-9, x => x.l <= hi + 1e-9)});
+            f: inCandle ? {st: 'bad', txt: 'bị thủng ngay trong nến'} : fate(x => x.c < lo - 1e-9, x => x.l <= hi + 1e-9, c => c < lo - 1e-9)});
         }
       } else if (kind === 'exh_b') {
         out.push({kind, side: 'up', lo: b.l, hi: b.l, name: 'Cạn kiệt bán', txt: `Đáy ${px(b.l)} gần như không ai bán tiếp.`,
-          f: fate(x => x.l < b.l - 1e-9, x => x.l <= b.l + step + 1e-9)});
+          f: fate(x => x.l < b.l - 1e-9, x => x.l <= b.l + step + 1e-9, c => c < b.l - 1e-9)});
       } else if (kind === 'exh_s') {
         out.push({kind, side: 'down', lo: b.h, hi: b.h, name: 'Cạn kiệt mua', txt: `Đỉnh ${px(b.h)} gần như không ai mua tiếp.`,
-          f: fate(x => x.h > b.h + 1e-9, x => x.h >= b.h - step - 1e-9)});
+          f: fate(x => x.h > b.h + 1e-9, x => x.h >= b.h - step - 1e-9, c => c > b.h + 1e-9)});
       } else if (kind === 'fail_b') out.push({kind, side: 'down', name: 'Hấp thụ mua thất bại', txt: 'Giá thủng mức hấp thụ của nến trước: bên đỡ giá đã thua.', f: null});
       else if (kind === 'fail_s') out.push({kind, side: 'up', name: 'Hấp thụ bán thất bại', txt: 'Giá vượt mức chặn của nến trước: bên chặn đã thua.', f: null});
       else if (kind === 'div_b') out.push({kind, side: 'up', name: 'Phân kỳ đáy', txt: 'Giá thủng đáy nhưng CVD cao hơn: lực bán yếu dần.', f: null});
@@ -660,15 +667,17 @@ const FE = (() => {
 
   // trục ngang chung của bản đồ và đường nỗ lực: cột theo nến
   function wGeom(host) {
-    const W = Math.max(320, host.clientWidth), L = 40, R = 26, cw = (W - L - R) / BARS.length;
+    const W = Math.max(320, host.clientWidth), L = 40, R = 26, cw = (W - L - R) / (BARS.length + (ATC ? 1 : 0));
     const idx = new Map(BARS.map((b, j) => [b.k, j]));
+    if (ATC) idx.set(ATC.k, BARS.length);
     return {W, L, R, cw, idx, cx: k => L + cw * (idx.get(k) + .5)};
   }
   function drawZoneMap(Z) {
     const host = $('fe-map'); host.innerHTML = '';
     const g = wGeom(host), {W, L, R, cw, cx} = g, H = 300, T = 8, B = 22;
     const step = tickSize(BARS[0].h, EX);
-    const lo = Math.min(...BARS.map(b => b.l)) - step, hi = Math.max(...BARS.map(b => b.h)) + step;
+    const ps = ATC ? [ATC.c] : [];
+    const lo = Math.min(...BARS.map(b => b.l), ...ps) - step, hi = Math.max(...BARS.map(b => b.h), ...ps) + step;
     const y = p => T + (hi - p) / (hi - lo) * (H - T - B);
     const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Bản đồ vùng dấu hiệu và phần cá mập'}, host);
     const gs = Math.max(1, Math.round((hi - lo) / step / 7)) * step;
@@ -718,6 +727,17 @@ const FE = (() => {
     }
     // giá đóng nối lại, nằm trên cùng
     el('path', {d: BARS.map((b, j) => (j ? 'L' : 'M') + cx(b.k).toFixed(1) + ' ' + y(b.c).toFixed(1)).join(''), fill: 'none', stroke: 'var(--ink)', 'stroke-width': 1.4, opacity: .85}, s);
+    // ATC: đoạn nét đứt từ giá khớp liên tục cuối tới giá đóng cửa, chấm vàng + nhãn
+    if (ATC) {
+      const lb = BARS[BARS.length - 1], xa = cx(ATC.k);
+      el('rect', {x: xa - cw / 2, y: T, width: cw, height: H - T - B, fill: 'rgba(212,175,106,.06)'}, s);
+      el('line', {x1: cx(lb.k), y1: y(lb.c), x2: xa, y2: y(ATC.c), stroke: 'var(--ink)', 'stroke-width': 1.4, 'stroke-dasharray': '4 3', opacity: .85}, s);
+      el('title', {}, el('circle', {cx: xa, cy: y(ATC.c), r: 5, fill: 'var(--gold2)', stroke: '#0B1628', 'stroke-width': 1.5}, s),
+        `ATC (giá đóng cửa) ${px(ATC.c)} · khớp ${fmt(ATC.vol)} cp`);
+      el('text', {x: xa - 8, y: y(ATC.c) + (y(ATC.c) < T + 24 ? 16 : -8), 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s,
+        `ATC ${px(ATC.c)} · ${mil(ATC.vol)}`);
+      el('text', {x: xa, y: H - 6, 'text-anchor': 'middle', style: 'font-size:10px;fill:var(--gold2)'}, s, 'ATC');
+    }
   }
 
   function drawWhaleVsPrice() {
@@ -732,7 +752,8 @@ const FE = (() => {
       return {b, wn, cv: acc, pp: (b.c / o0 - 1) * 100, dp: b.c - prev};
     });
     // hai thang riêng nhưng cùng neo 0 ở giữa: so được chiều và độ dốc (CVD cá mập thường lớn gấp chục lần % giá)
-    const mP = Math.max(.3, ...rows.map(r => Math.abs(r.pp))) * 1.15, mC = Math.max(.5, ...rows.map(r => Math.max(Math.abs(r.cv), Math.abs(r.wn)))) * 1.15;
+    const ppA = ATC ? (ATC.c / o0 - 1) * 100 : null;
+    const mP = Math.max(.3, ...rows.map(r => Math.abs(r.pp)), ppA == null ? 0 : Math.abs(ppA)) * 1.15, mC = Math.max(.5, ...rows.map(r => Math.max(Math.abs(r.cv), Math.abs(r.wn)))) * 1.15;
     const yP = v => T + (mP - v) / (2 * mP) * (H - T - B), y = v => T + (mC - v) / (2 * mC) * (H - T - B);
     const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'CVD cá mập và giá cùng thang phần trăm'}, host);
     // tô nền lệch pha: cá mập ròng ≥ 1 % KL phiên mà giá nến đi ngược
@@ -754,6 +775,11 @@ const FE = (() => {
     const path = (a, col, dash, wdt) => el('path', {d: rows.map((r, j) => (j ? 'L' : 'M') + cx(r.b.k).toFixed(1) + ' ' + y(a(r)).toFixed(1)).join(''), fill: 'none', stroke: col, 'stroke-width': wdt, 'stroke-dasharray': dash || ''}, s);
     el('path', {d: rows.map((r, j) => (j ? 'L' : 'M') + cx(r.b.k).toFixed(1) + ' ' + yP(r.pp).toFixed(1)).join(''), fill: 'none', stroke: '#6CC4FF', 'stroke-width': 2, 'stroke-dasharray': '6 4'}, s); path(r => r.cv, 'var(--gold2)', '', 2.2);
     const last = rows[rows.length - 1];
+    if (ATC) {
+      el('line', {x1: cx(last.b.k), y1: yP(last.pp), x2: cx(ATC.k), y2: yP(ppA), stroke: '#6CC4FF', 'stroke-width': 2, 'stroke-dasharray': '6 4'}, s);
+      el('title', {}, el('circle', {cx: cx(ATC.k), cy: yP(ppA), r: 4.5, fill: '#6CC4FF', stroke: '#0B1628', 'stroke-width': 1.5}, s), `ATC (giá đóng cửa) ${px(ATC.c)}: ${s1(ppA)} % so giá mở`);
+      el('text', {x: cx(ATC.k) - 8, y: yP(ppA) - 8, 'text-anchor': 'end', style: 'fill:#6CC4FF;font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s, `ATC ${s1(ppA)} %`);
+    }
     el('text', {x: cx(last.b.k) - 6, y: yP(last.pp) - 6, 'text-anchor': 'end', style: 'fill:#6CC4FF;font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s, `giá ${s1(last.pp)} %`);
     el('text', {x: cx(last.b.k) - 6, y: y(last.cv) + 14, 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s, `CVD CM ${s1(last.cv)} %`);
     el('text', {x: L + 4, y: T - 3, style: 'fill:var(--mute)'}, s, W < 600 ? '- - giá % (trái, xanh)  — CVD cá mập % (phải)  ▒ lệch pha' : '- - giá % so giá mở (xanh, thang trái)   — CVD cá mập % KL chủ động cả phiên (thang phải)   ▮ cá mập ròng từng nến   ▒ lệch pha');
@@ -762,10 +788,12 @@ const FE = (() => {
     // hiệu suất từng buổi
     const seg = (a, lab) => {
       if (!a.length) return '';
-      const i0 = rows.indexOf(a[0]), p0 = i0 ? rows[i0 - 1].b.c : o0, p1 = a[a.length - 1].b.c;
+      // buổi cuối tính giá tới giá đóng cửa ATC (có ATC khi phiên đã xong)
+      const isLast = a[a.length - 1] === rows[rows.length - 1];
+      const i0 = rows.indexOf(a[0]), p0 = i0 ? rows[i0 - 1].b.c : o0, p1 = isLast && ATC ? ATC.c : a[a.length - 1].b.c;
       const sw = a.reduce((x, r) => x + r.wn, 0), dp = (p1 / p0 - 1) * 100;
       const same = Math.abs(sw) < 1 ? null : Math.abs(dp) < .1 ? 'flat' : Math.sign(sw) === Math.sign(dp);
-      return `<b>${lab}</b>: cá mập ${sw >= 0 ? 'mua' : 'bán'} ròng ${Math.abs(sw).toLocaleString('vi-VN', {maximumFractionDigits: 1})} % KL phiên, giá ${s1(dp)} % → ` +
+      return `<b>${lab}</b>: cá mập ${sw >= 0 ? 'mua' : 'bán'} ròng ${Math.abs(sw).toLocaleString('vi-VN', {maximumFractionDigits: 1})} % KL phiên, giá ${s1(dp)} %${isLast && ATC ? ' (tới ATC)' : ''} → ` +
         (same == null ? 'cá mập gần như đứng ngoài' : same === 'flat' ? '<b style="color:var(--warn)">giá không nhúc nhích</b>: nỗ lực bị hấp thụ hết' : same ? `<b class="pos">cùng chiều</b> (${s1(Math.abs(dp / sw))} % giá / 1 % KL)` : `<b class="neg">NGƯỢC chiều</b>: có bên hấp thụ`);
     };
     const am = rows.filter(r => r.b.t < '12:00'), pm = rows.filter(r => r.b.t >= '12:00');
