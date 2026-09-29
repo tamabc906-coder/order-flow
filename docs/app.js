@@ -629,6 +629,27 @@ const FE = (() => {
       el('title', {}, g, `${b.t}: ${LAB[b.lab][0]} · nỗ lực ${s1(b.E)} · KL ${b.rel.toFixed(1)}× TB`);
       g.addEventListener('click', () => { select(b.k); });
     }
+    // ATC không có bên chủ động và chỉ khớp một giá → không có toạ độ trên ma trận; vẽ mũi tên từ nến khớp liên tục cuối
+    // chỉ hướng giá tới giá đóng cửa
+    if (ATC) {
+      const lb = BARS[BARS.length - 1], mv = Math.round((ATC.c - lb.c) / tickSize(lb.h, EX));
+      const x0 = X(lb.E), y0 = Y(lb.CL), len = 72, y1 = mv > 0 ? Math.max(T + 4, y0 - len) : mv < 0 ? Math.min(H - B - 4, y0 + len) : y0;
+      const x1 = mv ? x0 : Math.min(W - R - 4, x0 + len);
+      const mk = el('marker', {id: 'fe-q-ar', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto'}, el('defs', {}, s));
+      el('path', {d: 'M0 0L10 5L0 10z', fill: 'var(--gold2)'}, mk);
+      const g = el('g', {}, s);
+      el('line', {x1: x0, y1: y0 + (mv > 0 ? -8 : mv < 0 ? 8 : 0), x2: x1, y2: y1, stroke: 'var(--gold2)', 'stroke-width': 2, 'stroke-dasharray': '4 3', 'marker-end': 'url(#fe-q-ar)'}, g);
+      const lbl = `ATC ${px(ATC.c)} (${mv > 0 ? '+' : mv < 0 ? '−' : ''}${Math.abs(mv)} bước)`;
+      el('text', {x: x1 + (x1 > W * .7 ? -8 : 8), y: y1 + (mv > 0 ? 10 : mv < 0 ? 0 : -6), 'text-anchor': x1 > W * .7 ? 'end' : 'start',
+        style: 'fill:var(--gold2);font-weight:700;font-size:11px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, g, lbl);
+      el('title', {}, g, `ATC (giá đóng cửa) ${px(ATC.c)} · khớp ${fmt(ATC.vol)} cp · ${lbl.slice(lbl.indexOf('(') + 1, -1)} so giá đóng nến ${lb.t}`);
+      const p = document.createElement('p');
+      p.className = 'hint';
+      p.style.margin = '6px 0 0';
+      p.innerHTML = `<b class="gold">ATC (giá đóng cửa) ${px(ATC.c)}</b> · khớp ${mil(ATC.vol)} cp: khớp định kỳ, không có bên chủ động nên không đặt được lên ma trận. ` +
+        `Mũi tên vàng từ nến ${lb.t} chỉ giá đi tiếp tới ATC: ${mv > 0 ? 'lên' : mv < 0 ? 'xuống' : 'đứng'} ${Math.abs(mv)} bước.`;
+      host.appendChild(p);
+    }
   }
 
   // ---------------------------------------------------------------- 🐋 cá mập trong phiên
