@@ -467,7 +467,7 @@ const FE = (() => {
     el('line', {x1: L, x2: W - R, y1: yE(0), y2: yE(0), stroke: 'var(--line2)'}, s);
     for (const g of [1, -1]) el('line', {x1: L, x2: W - R, y1: yE(g * F.thr), y2: yE(g * F.thr), stroke: 'var(--gold3)', 'stroke-dasharray': '2 4', opacity: .6}, s);
     el('text', {x: L - 4, y: ye0 + 8, 'text-anchor': 'end', style: 'fill:var(--gold2)'}, s, 'nỗ lực');
-    el('text', {x: L - 4, y: ye0 + 20, 'text-anchor': 'end', style: 'fill:var(--ink)'}, s, 'kết quả');
+    el('text', {x: L - 4, y: ye0 + 20, 'text-anchor': 'end', style: 'fill:#6CC4FF'}, s, 'kết quả');
     BARS.forEach((b, j) => {
       const cx = L + cw * (j + .5), bw = Math.max(2, Math.min(14, cw * .5)), up = b.c >= b.o, col = up ? 'var(--buy)' : 'var(--sell)';
       const g = el('g', {style: 'cursor:pointer'}, s);
@@ -481,14 +481,14 @@ const FE = (() => {
       }
       const w2 = Math.max(2, Math.min(10, cw * .28));
       el('rect', {x: cx - w2 - .5, y: Math.min(yE(b.E), yE(0)), width: w2, height: Math.max(1, Math.abs(yE(b.E) - yE(0))), fill: 'var(--gold2)', rx: 1}, g);
-      el('rect', {x: cx + .5, y: Math.min(yR(b.CL), yR(0)), width: w2, height: Math.max(1, Math.abs(yR(b.CL) - yR(0))), fill: 'var(--ink)', rx: 1}, g);
+      el('rect', {x: cx + .5, y: Math.min(yR(b.CL), yR(0)), width: w2, height: Math.max(1, Math.abs(yR(b.CL) - yR(0))), fill: '#6CC4FF', rx: 1}, g);
       el('rect', {x: cx - cw * .42, y: yl0, width: cw * .84, height: 14, rx: 4, fill: LAB[b.lab][1]}, g);
       if (cw > 34 || j % 2 === 0) el('text', {x: cx, y: yl0 + 30, 'text-anchor': 'middle', style: `font-size:${cw > 40 ? 10.5 : 9}px;fill:${b.k === F.i ? 'var(--gold2)' : 'var(--mute)'};font-weight:${b.k === F.i ? 700 : 400}`}, g, b.t);
       el('title', {}, g, `${b.t} · ${LAB[b.lab][0]}\nnỗ lực ${s1(b.E)} điểm so TB (delta ${s1(b.sh)} % KL)\ngiá đóng ${b.CL >= 0 ? 'nửa trên' : 'nửa dưới'} nến, ${b.mv >= 0 ? '+' : ''}${b.mv} bước`);
       g.addEventListener('click', () => { select(b.k); });
     });
     $('fe-legend').innerHTML = Object.values(LAB).map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join('') +
-      '<span><i style="background:var(--gold2)"></i>nỗ lực</span><span><i style="background:var(--ink)"></i>kết quả</span><span><i style="background:var(--vwap);height:2px;vertical-align:3px"></i>VWAP</span>';
+      '<span><i style="background:var(--gold2)"></i>nỗ lực</span><span><i style="background:#6CC4FF"></i>kết quả</span><span><i style="background:var(--vwap);height:2px;vertical-align:3px"></i>VWAP</span>';
   }
 
   // ---------------------------------------------------------------- ① phán quyết
@@ -527,7 +527,7 @@ const FE = (() => {
           <div class="k">Kết quả</div>
           <div class="big ${b.c >= b.o ? 'pos' : 'neg'}">${b.c > b.o ? '▲' : b.c < b.o ? '▼' : '■'} ${b.mv >= 0 ? '+' : ''}${b.mv} bước (${s1((b.c / b.o - 1) * 100)} %)</div>
           <div class="sub">giá đóng ở <b>${Math.round(clPct)} %</b> chiều cao nến (${b.CL > .5 ? 'sát đỉnh' : b.CL > 0 ? 'nửa trên' : b.CL < -.5 ? 'sát đáy' : b.CL < 0 ? 'nửa dưới' : 'giữa'})</div>
-          <div class="meter" title="Vị trí giá đóng trong nến"><i style="left:0;width:${clPct}%;background:linear-gradient(90deg,rgba(241,230,208,.15),var(--ink))"></i><i class="mid"></i></div>
+          <div class="meter" title="Vị trí giá đóng trong nến"><i style="left:0;width:${clPct}%;background:linear-gradient(90deg,rgba(108,196,255,.15),#6CC4FF)"></i><i class="mid"></i></div>
           <div class="sub" style="margin-top:3px">thấp ${px(b.l)} ← → cao ${px(b.h)}</div>
         </div>
       </div>
@@ -1203,16 +1203,16 @@ function erBars(m) {
   el('line', {x1: L, x2: W - R, y1: y0, y2: y0, stroke: 'var(--line2)'}, s);
   for (const g of [1, -1]) el('line', {x1: L, x2: W - R, y1: yE(g * ER.te), y2: yE(g * ER.te), stroke: 'var(--gold3)', 'stroke-dasharray': '2 4', opacity: .6}, s);
   el('text', {x: L - 4, y: T + 4, 'text-anchor': 'end', style: 'fill:var(--gold2)'}, s, ers(mE) + '%');
-  el('text', {x: L - 4, y: T + 16, 'text-anchor': 'end', style: 'fill:var(--ink)'}, s, ers(mR) + '%');
+  el('text', {x: L - 4, y: T + 16, 'text-anchor': 'end', style: 'fill:#6CC4FF'}, s, ers(mR) + '%');
   el('text', {x: L - 4, y: y0 + 4, 'text-anchor': 'end'}, s, '0');
   rr.forEach((r, k) => {
     const cx = L + cw * (k + .5);
     const bar = (x, v, yf, c, tip) => el('title', {}, el('rect', {x, y: Math.min(yf(v), y0), width: bw, height: Math.max(1, Math.abs(yf(v) - y0)), fill: c, rx: 2}, s), tip);
     bar(cx - bw - 1, r.E, yE, 'var(--gold2)', `${dd(r.d)} nỗ lực ${erp(r.E)} (${smil(r.big)} cp)`);
-    bar(cx + 1, r.R, yR, 'var(--ink)', `${dd(r.d)} giá ${erp(r.R)} → ${px(r.close)}`);
+    bar(cx + 1, r.R, yR, '#6CC4FF', `${dd(r.d)} giá ${erp(r.R)} → ${px(r.close)}`);
     if (cw > 52) {
       el('text', {x: cx - bw / 2 - 1, y: r.E >= 0 ? yE(r.E) - 3 : yE(r.E) + 11, 'text-anchor': 'middle', style: 'fill:var(--gold2);font-size:10px'}, s, ers(r.E));
-      el('text', {x: cx + bw / 2 + 1, y: r.R >= 0 ? yR(r.R) - 3 : yR(r.R) + 11, 'text-anchor': 'middle', style: 'fill:var(--ink);font-size:10px'}, s, ers(r.R));
+      el('text', {x: cx + bw / 2 + 1, y: r.R >= 0 ? yR(r.R) - 3 : yR(r.R) + 11, 'text-anchor': 'middle', style: 'fill:#6CC4FF;font-size:10px'}, s, ers(r.R));
     }
     el('text', {x: cx, y: T + HB + 16, 'text-anchor': 'middle', style: 'font-weight:600;fill:var(--ink)'}, s, dd(r.d) + (r.live ? '·s' : ''));
     const c = ER_CLS[r.cls];
@@ -1220,7 +1220,7 @@ function erBars(m) {
     if (cw > 86) el('text', {x: cx, y: T + HB + 39, 'text-anchor': 'middle', style: 'fill:#0B1628;font-size:10px;font-weight:700'}, s, c[0].replace('Nỗ lực mua', 'Mua'));
   });
   $('e-legend').innerHTML = Object.values(ER_CLS).map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join('') +
-    '<span><i style="background:var(--gold2)"></i>nỗ lực</span><span><i style="background:var(--ink)"></i>kết quả</span>';
+    '<span><i style="background:var(--gold2)"></i>nỗ lực</span><span><i style="background:#6CC4FF"></i>kết quả</span>';
 }
 
 const ER_COLS = [
