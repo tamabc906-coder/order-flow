@@ -454,10 +454,11 @@ const FE = (() => {
   // ---------------------------------------------------------------- ③ dải cả phiên
   function drawStrip() {
     const host = $('fe-strip'); host.innerHTML = '';
-    const W = Math.max(320, host.clientWidth), n = BARS.length, L = 40, R = 6;
+    const W = Math.max(320, host.clientWidth), n = BARS.length + (ATC ? 1 : 0), L = 40, R = 6;
     const HP = 150, HE = 90, T = 8, yp0 = T, ye0 = yp0 + HP + 22, yl0 = ye0 + HE + 20, H = yl0 + 40;
     const cw = (W - L - R) / n;
-    const lo = Math.min(...BARS.map(b => b.l)), hi = Math.max(...BARS.map(b => b.h)), pad = (hi - lo) * .08 || .1;
+    const pa = ATC ? [ATC.c] : [];
+    const lo = Math.min(...BARS.map(b => b.l), ...pa), hi = Math.max(...BARS.map(b => b.h), ...pa), pad = (hi - lo) * .08 || .1;
     const yP = p => yp0 + (hi + pad - p) / (hi - lo + 2 * pad) * HP;
     const s = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Nến giá, nỗ lực và kết quả từng nến trong phiên'}, host);
     // lưới giá
@@ -494,6 +495,22 @@ const FE = (() => {
       el('title', {}, g, `${b.t} · ${LAB[b.lab][0]}\nnỗ lực ${s1(b.E)} điểm so TB (delta ${s1(b.sh)} % KL)\ngiá đóng ${b.CL >= 0 ? 'nửa trên' : 'nửa dưới'} nến, ${b.mv >= 0 ? '+' : ''}${b.mv} bước`);
       g.addEventListener('click', () => { select(b.k); });
     });
+    // cột ATC: khớp một giá (giá đóng cửa), không có bên chủ động nên không có cột nỗ lực/kết quả, không chọn được
+    if (ATC) {
+      const lb = BARS[BARS.length - 1], x0 = L + cw * (BARS.length - .5), cx = L + cw * (BARS.length + .5), bw = Math.max(6, Math.min(18, cw * .6));
+      const tick = tickSize(lb.h, EX), mv = Math.round((ATC.c - lb.c) / tick);
+      const g = el('g', {}, s);
+      el('rect', {x: cx - cw / 2 + 1, y: T, width: cw - 2, height: H - T - 2, rx: 6, fill: 'rgba(212,175,106,.05)'}, g);
+      el('line', {x1: x0, y1: yP(lb.c), x2: cx, y2: yP(ATC.c), stroke: 'var(--gold2)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3', opacity: .8}, g);
+      el('rect', {x: cx - bw / 2, y: yP(ATC.c) - 2, width: bw, height: 4, rx: 1, fill: 'var(--gold2)'}, g);
+      el('text', {x: cx > W - R - 60 ? cx - bw / 2 - 3 : cx + bw / 2 + 3, y: yP(ATC.c) - 5, 'text-anchor': cx > W - R - 60 ? 'end' : 'start',
+        style: 'fill:var(--gold2);font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, g, `ATC ${px(ATC.c)}`);
+      if (cw > 44) el('text', {x: cx, y: ye0 + HE / 2 + 4, 'text-anchor': 'middle', style: 'fill:var(--dim);font-size:9px'}, g, 'không CĐ');
+      el('rect', {x: cx - cw * .42, y: yl0, width: cw * .84, height: 14, rx: 4, fill: 'none', stroke: 'var(--gold2)', 'stroke-dasharray': '3 2'}, g);
+      if (cw > 50) el('text', {x: cx, y: yl0 + 10.5, 'text-anchor': 'middle', style: 'fill:var(--gold2);font-size:9.5px;font-weight:700'}, g, 'đóng cửa');
+      el('text', {x: cx, y: yl0 + 30, 'text-anchor': 'middle', style: `font-size:${cw > 40 ? 10.5 : 9}px;fill:var(--gold2)`}, g, 'ATC');
+      el('title', {}, g, `ATC (giá đóng cửa) ${px(ATC.c)} · khớp ${fmt(ATC.vol)} cp · ${mv >= 0 ? '+' : ''}${mv} bước so nến ${lb.t}\nKhớp định kỳ: không có bên chủ động, không tính nỗ lực/kết quả`);
+    }
     $('fe-legend').innerHTML = Object.values(LAB).map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join('') +
       '<span><i style="background:var(--gold2)"></i>nỗ lực</span><span><i style="background:#6CC4FF"></i>kết quả</span><span><i style="background:var(--vwap);height:2px;vertical-align:3px"></i>VWAP</span>';
   }
@@ -510,13 +527,17 @@ const FE = (() => {
     const lv = levels(b);
     // sau đó: giá đóng của 1, 2, 4 nến sau
     const idx = BARS.indexOf(b), fut = [1, 2, 4].map(k => BARS[idx + k]).filter(Boolean);
-    const aft = fut.map(x => `${x.t}: ${px(x.c)} (${x.c >= b.c ? '+' : ''}${Math.round((x.c - b.c) / tickSize(b.h, EX))} bước)`).join(' · ');
+    const stp = c => Math.round((c - b.c) / tickSize(b.h, EX)), sst = c => `${stp(c) > 0 ? '+' : stp(c) < 0 ? '−' : ''}${Math.abs(stp(c))} bước`;
+    const aft = [...fut.map(x => `${x.t}: ${px(x.c)} (${sst(x.c)})`), ...(ATC && fut.length ? [`ATC: ${px(ATC.c)} (${sst(ATC.c)})`] : [])].join(' · ');
+    // còn < 4 nến khớp liên tục phía sau mà phiên đã có ATC → đánh giá tới giá đóng cửa
+    const toATC = ATC && !BARS[idx + 4];
+    const fin = toATC ? ATC : fut[fut.length - 1];
     const key = lv.filter(x => x.f && (x.kind.startsWith('absorb') || x.kind.startsWith('stack') || x.kind.startsWith('exh')));
     const agree = b.lab === 'abss' || b.lab === 'okb' ? 'up' : b.lab === 'absb' || b.lab === 'oks' ? 'down' : null;
     let outcome = '';
-    if (agree && fut.length) {
-      const last = fut[fut.length - 1], good = agree === 'up' ? last.c > b.c : last.c < b.c;
-      outcome = `<li><b>Kết quả sau ${fut.length === 3 ? 4 : fut.length} nến:</b> nến gợi ý giá ${agree === 'up' ? 'lên' : 'xuống'}, thực tế giá ${last.c > b.c ? 'lên' : last.c < b.c ? 'xuống' : 'đứng'} → ` +
+    if (agree && fin) {
+      const last = fin, good = agree === 'up' ? last.c > b.c : last.c < b.c;
+      outcome = `<li><b>Kết quả ${toATC ? 'tới giá đóng cửa (ATC)' : `sau ${fut.length === 3 ? 4 : fut.length} nến`}:</b> nến gợi ý giá ${agree === 'up' ? 'lên' : 'xuống'}, thực tế giá ${last.c > b.c ? 'lên' : last.c < b.c ? 'xuống' : 'đứng'} (${sst(last.c)}) → ` +
         `<span class="stag ${good ? 'sg-ok' : 'sg-bad'}">${good ? '✓ đúng hướng' : '✕ ngược hướng'}</span></li>`;
     }
     $('fe-verdict').innerHTML = `
@@ -543,6 +564,7 @@ const FE = (() => {
         <li>${whale}</li>
         ${key.map(x => `<li><b>${x.name}</b> ${x.lo != null ? (x.lo === x.hi ? px(x.lo) : px(x.lo) + '–' + px(x.hi)) : ''}: <span class="stag sg-${x.f.st}">${x.f.st === 'ok' ? '✓' : x.f.st === 'bad' ? '✕' : '…'} ${x.f.txt}</span></li>`).join('')}
         ${aft ? `<li>Giá đóng các nến sau: ${aft}</li>` : ''}
+        ${ATC ? `<li><b>Giá đóng cửa (ATC): <span class="gold">${px(ATC.c)}</span></b> (${sst(ATC.c)} so giá đóng nến này) · khớp ${mil(ATC.vol)} cp</li>` : ''}
         ${outcome}
       </ul>`;
   }
