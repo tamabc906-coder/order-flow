@@ -745,18 +745,18 @@ const FE = (() => {
     el('line', {x1: L, x2: W - R, y1: y(0), y2: y(0), stroke: 'var(--line2)'}, s);
     const gstep = mm => mm > 20 ? 10 : mm > 10 ? 5 : mm > 4 ? 2 : mm > 2 ? 1 : mm > 1 ? .5 : .2;
     const gP = gstep(mP), gC = gstep(mC);
-    for (let v = -Math.floor(mP / gP) * gP; v <= mP + 1e-9; v += gP) if (Math.abs(v) > 1e-9) el('text', {x: L - 4, y: yP(v) + 3, 'text-anchor': 'end', style: 'fill:var(--ink)'}, s, s1(v) + '%');
+    for (let v = -Math.floor(mP / gP) * gP; v <= mP + 1e-9; v += gP) if (Math.abs(v) > 1e-9) el('text', {x: L - 4, y: yP(v) + 3, 'text-anchor': 'end', style: 'fill:#6CC4FF'}, s, s1(v) + '%');
     for (let v = -Math.floor(mC / gC) * gC; v <= mC + 1e-9; v += gC) if (Math.abs(v) > 1e-9) el('text', {x: W - R + 2, y: y(v) + 3, style: 'fill:var(--gold2);font-size:9.5px'}, s, s1(v));
     rows.forEach(r => {
       const w = Math.min(10, cw * .3);
       el('rect', {x: cx(r.b.k) - w / 2, y: Math.min(y(r.wn), y(0)), width: w, height: Math.max(1, Math.abs(y(r.wn) - y(0))), fill: r.wn >= 0 ? 'var(--buy)' : 'var(--sell)', opacity: .55, rx: 1}, s);
     });
     const path = (a, col, dash, wdt) => el('path', {d: rows.map((r, j) => (j ? 'L' : 'M') + cx(r.b.k).toFixed(1) + ' ' + y(a(r)).toFixed(1)).join(''), fill: 'none', stroke: col, 'stroke-width': wdt, 'stroke-dasharray': dash || ''}, s);
-    el('path', {d: rows.map((r, j) => (j ? 'L' : 'M') + cx(r.b.k).toFixed(1) + ' ' + yP(r.pp).toFixed(1)).join(''), fill: 'none', stroke: 'var(--ink)', 'stroke-width': 2}, s); path(r => r.cv, 'var(--gold2)', '', 2.2);
+    el('path', {d: rows.map((r, j) => (j ? 'L' : 'M') + cx(r.b.k).toFixed(1) + ' ' + yP(r.pp).toFixed(1)).join(''), fill: 'none', stroke: '#6CC4FF', 'stroke-width': 2, 'stroke-dasharray': '6 4'}, s); path(r => r.cv, 'var(--gold2)', '', 2.2);
     const last = rows[rows.length - 1];
-    el('text', {x: cx(last.b.k) - 6, y: yP(last.pp) - 6, 'text-anchor': 'end', style: 'fill:var(--ink);font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s, `giá ${s1(last.pp)} %`);
+    el('text', {x: cx(last.b.k) - 6, y: yP(last.pp) - 6, 'text-anchor': 'end', style: 'fill:#6CC4FF;font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s, `giá ${s1(last.pp)} %`);
     el('text', {x: cx(last.b.k) - 6, y: y(last.cv) + 14, 'text-anchor': 'end', style: 'fill:var(--gold2);font-weight:700;font-size:10.5px;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, s, `CVD CM ${s1(last.cv)} %`);
-    el('text', {x: L + 4, y: T - 3, style: 'fill:var(--mute)'}, s, W < 600 ? '— giá % (trái)  — CVD cá mập % (phải)  ▒ lệch pha' : '— giá % so giá mở (thang trái)   — CVD cá mập % KL chủ động cả phiên (thang phải)   ▮ cá mập ròng từng nến   ▒ lệch pha');
+    el('text', {x: L + 4, y: T - 3, style: 'fill:var(--mute)'}, s, W < 600 ? '- - giá % (trái, xanh)  — CVD cá mập % (phải)  ▒ lệch pha' : '- - giá % so giá mở (xanh, thang trái)   — CVD cá mập % KL chủ động cả phiên (thang phải)   ▮ cá mập ròng từng nến   ▒ lệch pha');
     const pmI = BARS.findIndex(b => b.t >= '12:00');
     if (pmI > 0) el('line', {x1: L + cw * pmI, x2: L + cw * pmI, y1: T, y2: H - B, stroke: 'var(--line2)', 'stroke-dasharray': '4 4'}, s);
     // hiệu suất từng buổi
