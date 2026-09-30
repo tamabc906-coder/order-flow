@@ -985,10 +985,11 @@ function fpx(host, cols, zones, opt) {
     const g = el('g', {}, s), X = x0(i);
     const mx = Math.max(1, ...b.rl.map(r => r[1] + r[2] + r[3]));
     for (const [r, se, bu, xx] of b.rl) {
-      const v = se + bu + xx, y = yRow(r), poc = r === b.poc;
+      // ATO/ATC chỉ khớp một giá: không tô POC (kem) để khỏi nhầm với POC nến thường; luôn là ô xám
+      const v = se + bu + xx, y = yRow(r), poc = r === b.poc && !b.auction;
       const q = se + bu ? (bu - se) / (se + bu) : 0;
       const fill = poc ? '#F1E6D0' : b.auction || Math.abs(q) < .1 ? 'var(--x)' : q > 0 ? 'var(--buy)' : 'var(--sell)';
-      el('rect', {x: X, y: y + .5, width: CW, height: RH - 1, fill, 'fill-opacity': poc ? .92 : .12 + .7 * Math.pow(v / mx, .7), rx: 2}, g);
+      el('rect', {x: X, y: y + .5, width: CW, height: RH - 1, fill, 'fill-opacity': poc ? .92 : b.auction ? .55 : .12 + .7 * Math.pow(v / mx, .7), rx: 2}, g);
       if (b.imbR.has(r)) el('rect', {x: X + .75, y: y + 1.25, width: CW - 1.5, height: RH - 2.5, fill: 'none', stroke: 'var(--gold2)', 'stroke-width': 1.5, rx: 2}, g);
       const txt = b.auction ? kf(xx) : FPX.mode === 'bs' ? `${kf(se)}×${kf(bu)}` : FPX.mode === 'd' ? kfs(bu - se) : kf(v);
       el('text', {x: X + CW / 2, y: y + RH / 2 + FS / 2 - 1, 'text-anchor': 'middle',
@@ -1060,7 +1061,8 @@ function fpxTable(host, zones, cols, endName) {
 let FPXD = null;
 function drawDayFpx() {
   const ex = D.ex || 'HOSE';
-  const cols = V.bars.map(b => ({...b, tip: `${b.t} · ${b.auction ? 'khớp ' + fmt(b.vol) : 'delta ' + sgn(b.d) + ' · tổng ' + fmt(b.vol)}`}));
+  const cols = V.bars.map(b => ({...b, tip: b.auction ? `${b.t}: khớp định kỳ ${b.t === 'ATC' ? 'đóng' : 'mở'} cửa ${fmt(b.vol)} cp ở ${px(b.c)}, không có bên chủ động nên không có delta`
+    : `${b.t} · delta ${sgn(b.d)} · tổng ${fmt(b.vol)}`}));
   const Z = FE.zones().map(z => fpxProve({...z, ex, lbl: `${SIG[z.kind].s} ${z.t} CM ${Math.round(z.share)}%`,
     tip: `${z.name} ${px(z.lo)}${z.hi !== z.lo ? '–' + px(z.hi) : ''} · cá mập ${Math.round(z.share)} % phía chủ động`}, cols));
   FPXD = fpx($('d-fpx'), cols, Z, {id: 'd', ex, aria: 'Footprint cả phiên', sel, onPick: i => select(i), redraw: drawDayFpx});
