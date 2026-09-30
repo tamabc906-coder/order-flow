@@ -910,13 +910,29 @@ function readStats() {
 function drawRead() {
   const host = $('d-read'), R = D.read;
   if (!R) { host.innerHTML = '<p class="note">Phiên này chưa đủ nến buổi sáng để đọc.</p>' + readStats(); return; }
+  const P = R.points || [], main = P.filter(p => !p.minor), minor = P.filter(p => p.minor);
+  const pt = p => `<li><button data-t="${p.t}"><span class="rd-txt">${esc(p.txt)}</span>` +
+    (p.why ? `<span class="rd-why">${esc(p.why)}</span>` : '') + '</button></li>';
+  const arrow = d => d > 0 ? '<b class="pos">▲ mua</b>' : d < 0 ? '<b class="neg">▼ bán</b>' : '–';
+  const nUp = P.filter(p => p.dir > 0).length, nDn = P.filter(p => p.dir < 0).length;
+  const sigT = P.length ? `<h4 class="rd-h">Tổng hợp dấu hiệu</h4><div class="scroll"><table class="fpx-t rd-sig"><tr><th>Giờ</th><th>Dấu hiệu</th><th>Nghiêng về</th></tr>` +
+    P.map(p => `<tr><td>${p.t}</td><td>${esc(p.tag || p.kind)}</td><td>${arrow(p.dir)}</td></tr>`).join('') + '</table></div>' : '';
   const lv = R.levels.map(l => `<tr class="w-${l.where}"><td>${px(l.p)}</td><td>${esc(l.txt)}</td><td>${esc(l.sig)}</td></tr>`).join('');
+  const plan = R.plan ? `<div class="rd-plan">${R.plan.map(k => `<div class="rd-k k-${k.k}"><b>${esc(k.name)}</b><span>Khi ${esc(k.cond)}</span><span>→ ${esc(k.then)}</span></div>`).join('')}</div>`
+    : `<p class="rd-watch">${esc(R.watch)}</p>`;
   const out = R.out ? `<div class="rd-out ${R.out.hit == null ? '' : R.out.hit ? 'ok' : 'bad'}"><b>Buổi chiều thực tế:</b> ${esc(R.out.txt)}</div>` : '';
   host.innerHTML = `<div class="rd-title ${leanCls(R.lean)}">${esc(R.title)}</div>
     <p class="hint">${esc(R.sub)} Đọc từ nến 15' buổi sáng (tới 11:30); bấm từng điểm để xem nến trên biểu đồ ★.</p>
-    <ul class="rd-pts">${R.points.map(p => `<li><button data-t="${p.t}">${esc(p.txt)}</button></li>`).join('') || '<li class="note">Buổi sáng không có điểm nào nổi bật.</li>'}</ul>
+    ${R.summary && R.summary.length ? `<h4 class="rd-h">Bức tranh tổng</h4><ul class="rd-sum">${R.summary.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+    <h4 class="rd-h">Các điểm quan trọng</h4>
+    <ul class="rd-pts">${main.map(pt).join('') || '<li class="note">Buổi sáng không có điểm nào nổi bật.</li>'}</ul>
+    ${minor.length ? `<details class="rd-more"><summary>+${minor.length} điểm phụ</summary><ul class="rd-pts">${minor.map(pt).join('')}</ul></details>` : ''}
+    ${sigT}
+    <p class="rd-lean">Bản đọc nghiêng về: <b class="${R.lean > 0 ? 'pos' : R.lean < 0 ? 'neg' : ''}">${esc(R.lean_txt || (R.lean > 0 ? 'lên' : R.lean < 0 ? 'xuống' : 'không nghiêng bên nào'))}</b>` +
+    (P.length ? ` · ${nUp} dấu hiệu nghiêng mua, ${nDn} nghiêng bán` : '') + `</p>
+    <h4 class="rd-h">Mức cần canh</h4>
     <div class="scroll"><table class="fpx-t rd-lv"><tr><th>Giá</th><th>Ý nghĩa</th><th>Tín hiệu cần chờ</th></tr>${lv}</table></div>
-    <p class="rd-watch">${esc(R.watch)}</p>${out}${readStats()}`;
+    <h4 class="rd-h">Kịch bản buổi chiều</h4>${plan}${out}${readStats()}`;
   host.querySelectorAll('.rd-pts button').forEach(b => b.onclick = () => {
     const t = b.dataset.t, B = V.bars;
     let i = B.findIndex(x => x.t === t);

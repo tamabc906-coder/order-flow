@@ -250,6 +250,12 @@ def test_morning_reading_tcb_20260930():
     full, _ = signals.analyse(rec["bars"], "HOSE", 15)
     out = reading.read_outcome(rd, full, "HOSE")
     assert out["atc"] == 32.55 and out["moves"] == 2 and out["hit"] is True and out["base"] is False
+    # bản đầy đủ: nghĩa là, bức tranh tổng, tổng hợp dấu hiệu, kịch bản
+    assert all(p["why"] and p["tag"] for p in rd["points"])
+    assert any(p["kind"] == "div_b" and p["dir"] == 1 for p in rd["points"])
+    assert len(rd["summary"]) >= 5 and any(x.startswith("Vùng giá trị sáng") for x in rd["summary"])
+    assert any(x.startswith("Đáy nâng dần (32,35 → 32,4)") for x in rd["summary"])
+    assert [k["k"] for k in rd["plan"]] == ["up", "dn", "mid"] and "32,8" in rd["plan"][0]["then"]
 
 
 def test_morning_reading_quiet_session_no_crash():

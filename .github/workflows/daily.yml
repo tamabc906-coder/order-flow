@@ -65,6 +65,26 @@ jobs:
           git pull --rebase
           git push
 
+      # Gọi Kiểm Mua (phongthietke-lgtm/kiem-mua) chạy ngay: order-flow là nguồn xong cuối, còn lịch schedule của repo
+      # kiem-mua bị GitHub trễ 5–8 tiếng (28–30/09/2026). Job Kiểm Mua tự chờ đủ nguồn và bỏ qua phiên đã chấm nên gọi
+      # nhiều lượt vô hại. Không gọi ở lượt 12:05 trưa (phiên dở dang). Token fine-grained của phongthietke-lgtm, chỉ
+      # repo kiem-mua, quyền Actions read+write → Secret KIEM_MUA_DISPATCH; thiếu/sai token thì bỏ qua, không làm đỏ job.
+      - name: Gọi Kiểm Mua chạy
+        if: always() && github.event_name == 'schedule'
+        continue-on-error: true
+        env:
+          TOKEN: ${{ secrets.KIEM_MUA_DISPATCH }}
+        run: |
+          H=$(date -u +%H)
+          if [ -z "$TOKEN" ]; then echo "chưa có Secret KIEM_MUA_DISPATCH — bỏ qua"; exit 0; fi
+          if [ "$H" -ge 4 ] && [ "$H" -lt 8 ]; then echo "lượt trưa — không gọi"; exit 0; fi
+          code=$(curl -s -o /tmp/resp -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/phongthietke-lgtm/kiem-mua/actions/workflows/daily.yml/dispatches \
+            -d '{"ref":"main"}')
+          echo "GitHub trả $code"; cat /tmp/resp || true
+          [ "$code" = "204" ]
+
       # Commit xong RỒI mới báo đỏ. continue-on-error làm failure() không còn đúng → xét outcome của step đó.
       - name: Báo đỏ nếu có mã lỗi
         if: steps.collect.outcome == 'failure'
