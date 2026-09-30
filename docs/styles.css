@@ -257,3 +257,18 @@ ol.plain li{margin:6px 0}
 .fpx-t th,.fpx-t td{padding:4px 6px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
 .fpx-t th{color:var(--mute);font-weight:500}
 .fpx-t td:first-child,.fpx-t th:first-child{text-align:left}
+
+/* 📋 Bản đọc phiên sáng (30/09/2026) */
+.rd-title{font-weight:750;font-size:15.5px;margin:2px 0 4px;padding-left:10px;border-left:3px solid var(--x)}
+.rd-title.lean-up{border-color:var(--buy)} .rd-title.lean-dn{border-color:var(--sell)}
+.rd-pts{list-style:none;margin:6px 0 8px;padding:0;display:grid;gap:4px}
+.rd-pts button{all:unset;cursor:pointer;display:block;padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink);background:rgba(11,22,40,.45)}
+.rd-pts button:hover{border-color:var(--line2)}
+.rd-lv tr.w-tren td:first-child{color:var(--buy)} .rd-lv tr.w-duoi td:first-child{color:var(--sell)}
+.rd-lv td:nth-child(2),.rd-lv td:nth-child(3){text-align:left;white-space:normal}
+.rd-watch{margin:8px 0 4px;font-weight:600;color:var(--gold2);font-size:13.5px}
+.rd-out{margin:8px 0 4px;padding:6px 8px;border-radius:8px;font-size:13px;border:1px solid var(--line)}
+.rd-out.ok{border-color:var(--buy)} .rd-out.bad{border-color:var(--sell)}
+.rd-stats{margin-top:8px}
+.row .rd-line{grid-column:1/-1;font-size:12.5px;color:var(--ink);padding-left:8px;border-left:3px solid var(--x)}
+.row .rd-line.lean-up{border-color:var(--buy)} .row .rd-line.lean-dn{border-color:var(--sell)}

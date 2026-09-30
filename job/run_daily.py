@@ -26,7 +26,7 @@ from pathlib import Path
 
 from common import dnse, vndirect
 from common.config import ROOT, SITE_DATA, STORE, TZ
-from flow import daily, signals
+from flow import daily, reading, signals
 from flow.ticks import band, session_record, settled, tick_size
 from job import watchlist
 
@@ -112,7 +112,17 @@ def seed(items: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------- dựng docs/data
-def intraday_doc(sym: str, ex: str, rec: dict, prev: dict | None, closes: dict) -> dict:
+def morning_read(rec: dict, ex: str, tfs: dict, full: bool) -> dict | None:
+    """Bản đọc phiên sáng (khung 15', chỉ nến trước 11:30 → phiên đủ và lượt 12:05 cho cùng một bản đọc);
+    phiên đủ thì ghép thêm buổi chiều thực tế (`out`)."""
+    mb, _ = signals.analyse(reading.morning(rec["bars"]), ex, reading.TF)
+    rd = reading.read_morning(mb, ex)
+    if rd and full:
+        rd["out"] = reading.read_outcome(rd, tfs[str(reading.TF)]["bars"], ex)
+    return rd
+
+
+def intraday_doc(sym: str, ex: str, rec: dict, prev: dict | None, closes: dict, full: bool = True) -> dict:
     tfs = {str(tf): dict(zip(("bars", "sigs"), signals.analyse(rec["bars"], ex, tf))) for tf in TFS}
     tot = {k: sum(b[k] for b in rec["bars"]) for k in ("buy", "sell", "x", "bb", "bs")}
     # VWAP khớp liên tục (= nến liên tục cuối), cả phiên gồm ATO/ATC, giá vốn lệnh lớn mua/bán CĐ (giá thô)
@@ -133,7 +143,7 @@ def intraday_doc(sym: str, ex: str, rec: dict, prev: dict | None, closes: dict) 
         cf = [round(int(ref * (1 - bd) / step + 0.9999) * step, 2), round(int(ref * (1 + bd) / step) * step, 2)]
     return {"sym": sym, "day": rec["date"], "ex": ex, "ticks": rec["ticks"], "total": rec["total"],
             "gap": rec.get("gap", 0), "no_side": rec.get("no_side", False), "tot": tot, "ref": ref, "cf": cf,
-            "tf": tfs}
+            "tf": tfs, "read": morning_read(rec, ex, tfs, full)}
 
 
 def list_row(it: dict, dl: list[dict], doc: dict | None) -> dict:
@@ -151,6 +161,11 @@ def list_row(it: dict, dl: list[dict], doc: dict | None) -> dict:
             row["sig"][s["kind"]] = row["sig"].get(s["kind"], 0) + 1
         row["cvd"] = [b["cvd"] for b in view["bars"] if not b["auction"]]
         row["no_side"] = doc["no_side"]
+        rd = doc.get("read")
+        if rd:
+            out = rd.get("out") or {}
+            row["read"] = {"v": rd["v"], "lean": rd["lean"], "title": rd["title"], "hit": out.get("hit"),
+                           "out": out.get("txt")}
     return row
 
 
@@ -169,7 +184,7 @@ def build_live(items: list[dict], closes: dict, partial: dict | None, day: str |
         if not rec or rec["date"] <= (day or ""):
             continue
         recs, cl = records(sym), closes.get(sym, {})
-        doc = intraday_doc(sym, ex, rec, recs[-1] if recs else None, cl)
+        doc = intraday_doc(sym, ex, rec, recs[-1] if recs else None, cl, full=False)
         # share/rel so với TB 20 phiên ĐỦ trước đó — share là tỷ lệ nên phiên sáng so được với phiên đủ
         dl = daily.days(recs + [rec], cl, DAILY_OUT)
         # dayrow = cột phiên sáng cho tab Nhiều phiên, cùng dạng daily/<MÃ>.json (CVD nối tiếp các phiên đủ)
@@ -192,6 +207,8 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
     all_days = sorted({p.stem for p in STORE.glob("*/*.json")})
     keep = set(all_days[-KEEP_INTRADAY:])
     rows, dates = [], set()
+    # bản đọc sáng đúng hướng bao nhiêu lần (mọi phiên đủ đang giữ) + mốc "chiều đi tiếp hướng buổi sáng"
+    stats = {"n": 0, "hit": 0, "nb": 0, "base": 0}
     for it in items:
         sym, ex = it["symbol"], it.get("exchange") or "HOSE"
         recs = records(sym)
@@ -208,6 +225,11 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
             dump(SITE_DATA / "intraday" / rec["date"] / f"{sym}.json", doc)
             dates.add(rec["date"])
             last_doc = doc
+            out = (doc["read"] or {}).get("out") or {}
+            if out.get("hit") is not None:
+                stats["n"] += 1; stats["hit"] += out["hit"]
+            if out.get("base") is not None:
+                stats["nb"] += 1; stats["base"] += out["base"]
         rows.append(list_row(it, dl, last_doc))
 
     # dọn: phiên nến 5' ngoài cửa sổ, mã đã rời danh mục
@@ -223,7 +245,7 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
     day = max((r["day"] for r in rows), default=None)
     n_live = build_live(items, closes, run["partial"] if run else None, day)
     dump(SITE_DATA / "latest.json", {"generated": now, "day": day, "dates": sorted(dates, reverse=True),
-                                     "watchlist": wl_source, "items": rows})
+                                     "watchlist": wl_source, "read_stats": stats, "items": rows})
     state = {"run_at": now, "day": day, "symbols": len(items), "built": len(rows), "watchlist": wl_source,
              "dnse_missing": sorted(s for s, c in closes.items() if not c),
              "gaps": {r["sym"]: r["gap"] for r in rows if r["gap"] and r["day"] == day},

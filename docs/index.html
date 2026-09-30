@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 <header class="top">
@@ -40,6 +40,10 @@
         <input type="range" id="fe-thr" min="5" max="40" step="1" value="15"> <b id="fe-thr-v" class="gold">15</b></label>
     </div>
 
+    <div class="card rd" id="readcard">
+      <h3><span class="num">📋</span>Bản đọc phiên sáng</h3>
+      <div id="d-read"></div>
+    </div>
     <div class="card fpx" id="fpxcard">
       <h3><span class="num">★</span>Footprint cả phiên · vùng cá mập</h3>
       <p class="hint">Mỗi cột là một nến của khung đang chọn: ô KL theo mức giá (đỏ bán chủ động trội, xanh mua trội, ô trắng POC,
@@ -355,6 +359,19 @@
       </dl>
       <p class="gp"><b>✓ / ✕ chỉ mô tả chuyện đã xảy ra, chưa kiểm định.</b> Bảng dưới biểu đồ ghi số bước giá tới cuối khung tính từ lần chạm đầu và từ lần ✓ để tự theo dõi.</p>
     </div>
+    <div class="card">
+      <h3><span class="num">8</span>Bản đọc phiên sáng (📋)</h3>
+      <p class="gp">Sau lượt quét 12:05, job tự đọc nến 15' buổi sáng của từng mã theo luật cố định (không dùng AI) và ghép thành: một câu kết luận, hộp giá sau 30' đầu, tối đa 6 điểm quan trọng, bảng mức cần canh và câu "Canh" cho buổi chiều. Phiên đủ (sau 16:00) có thêm dòng <b>Buổi chiều thực tế</b>. Tab Danh mục có dòng 📋 dưới mỗi mã và nút xếp "Bản đọc sáng".</p>
+      <dl class="defs">
+        <dt>Hộp giá</dt><dd>Đáy–đỉnh buổi sáng sau 30' đầu (nhịp mở cửa thường ồn). Vẽ nét đứt vàng trên thẻ ★.</dd>
+        <dt>Giằng co · bán nhiều nhưng giá không giảm thêm</dt><dd>Sau 30' đầu giá đi không quá nửa hộp mà bán chủ động ròng ≥ 10 % KL: có người mua đặt chờ đang đỡ. <span>Ngược lại: mua nhiều mà giá không tăng thêm.</span></dd>
+        <dt>◆ … cá mập N % → trần/sàn</dt><dd>Vùng cá mập như thẻ ★ (≥ 50 % phía chủ động), kèm số lần ✓ trong buổi sáng.</dd>
+        <dt>Thủng giả / vượt giả</dt><dd>Sau 30' đầu, nến tạo đáy (đỉnh) mới của buổi sáng mà ô rìa ≤ 1 % KL nến, rồi đóng lại trong vùng cũ.</dd>
+        <dt>KL lớn nhất sáng</dt><dd>Nến nhiều KL nhất có delta ≥ 30 % KL chủ động: một phía dồn mạnh. Không tạo đáy/đỉnh mới = bị hấp thụ.</dd>
+        <dt>Xếp chồng / cạn</dt><dd>Imbalance xếp chồng còn nguyên (chưa bị đóng xuyên) và dấu hiệu cạn kiệt ở đáy/đỉnh.</dd>
+      </dl>
+      <p class="gp"><b>Đúng / ngược hướng</b>: so giá ATC với giá cuối buổi sáng theo hướng bản đọc nghiêng về. Dòng đối chiếu cuối thẻ 📋 cộng dồn trên mọi phiên đang giữ, kèm mốc "chiều đi tiếp hướng buổi sáng" để so. Tới giờ bản đọc <b>chưa hơn tung đồng xu</b>: chỉ dùng để hiểu phiên sáng.</p>
+    </div>
   </section>
 </div>
 
@@ -366,7 +383,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=22"></script>
+<script src="app.js?v=23"></script>
 <script>
 if ('serviceWorker' in navigator) {
   // Bản mới tiếp quản (skipWaiting + claim) → tải lại một lần để thấy ngay, không phải mở app hai lần

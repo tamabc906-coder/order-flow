@@ -101,6 +101,7 @@ const SORTS = [
   ['delta', 'Delta', (a, b) => a.delta - b.delta, true],
   ['big', 'Lệnh lớn', (a, b) => a.big - b.big, true],
   ['sig', 'Dấu hiệu', (a, b) => nsig(a) - nsig(b), true],
+  ['read', 'Bản đọc sáng', (a, b) => (a.read ? a.read.lean : -2) - (b.read ? b.read.lean : -2), true],
   ['sym', 'A→Z', (a, b) => a.sym.localeCompare(b.sym), false],
 ];
 const nsig = r => Object.values(r.sig).reduce((s, v) => s + v, 0);
@@ -159,7 +160,8 @@ function renderList() {
         <span>Delta <b class="${r.delta >= 0 ? 'pos' : 'neg'}">${smil(r.delta)}</b></span>
         <span>Lớn <b class="${r.big >= 0 ? 'pos' : 'neg'}">${smil(r.big)}</b></span>
         ${r.no_side ? '<span class="tag">nguồn không có bên CĐ</span>' : ''}
-      </div></div>`;
+      </div>${r.read ? `<div class="rd-line ${leanCls(r.read.lean)}">📋 ${esc(r.read.title)}` +
+        (!live && r.read.hit != null ? ` <b class="${r.read.hit ? 'pos' : 'neg'}">· chiều ${r.read.hit ? 'đúng' : 'ngược'}</b>` : '') + '</div>' : ''}</div>`;
   }).join('') || '<p class="empty">Chưa có dữ liệu.</p>';
   $('l-list').querySelectorAll('.row').forEach(d => {
     const open = () => go('day', d.dataset.sym, live ? LIVE_DAY : null);
@@ -207,6 +209,7 @@ async function renderDay(wantDay) {
     VW.bb || VW.bs ? 'VWAP lệnh lớn mua / bán CĐ' : 'chưa có cho phiên này', '']);
   $('d-tiles').innerHTML = tiles.map(([k, v, n, c]) =>
     `<div class="tile"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="n">${n}</div></div>`).join('');
+  drawRead();
   showTF();
 }
 
@@ -892,6 +895,36 @@ const FE = (() => {
 })();
 $('fe-thr').oninput = e => FE.setThr(+e.target.value);
 
+// ---------------------------------------------------------------- 📋 Bản đọc phiên sáng (30/09/2026)
+// Job (flow/reading.py) ghép câu theo luật từ nến 15' buổi sáng; phiên đủ có thêm `out` = buổi chiều thực tế.
+const leanCls = l => l > 0 ? 'lean-up' : l < 0 ? 'lean-dn' : 'lean-0';
+function readStats() {
+  const st = LATEST && LATEST.read_stats;
+  if (!st || !st.n) return '';
+  const p = (a, n) => n ? Math.round(a / n * 100) + ' %' : '–';
+  const weak = st.hit / st.n < .55;
+  return `<p class="hint rd-stats">Đối chiếu trên kho (${st.n} lần mã-phiên có kết quả): bản đọc sáng đúng hướng buổi chiều <b>${st.hit}/${st.n} (${p(st.hit, st.n)})</b>; ` +
+    `mốc so sánh "chiều đi tiếp hướng buổi sáng" ${st.base}/${st.nb} (${p(st.base, st.nb)}). ` +
+    (weak ? '<b class="neg">Chưa hơn tung đồng xu</b>: dùng để hiểu phiên sáng, không phải tín hiệu mua bán.' : 'Mẫu còn ít, chưa kết luận được.') + '</p>';
+}
+function drawRead() {
+  const host = $('d-read'), R = D.read;
+  if (!R) { host.innerHTML = '<p class="note">Phiên này chưa đủ nến buổi sáng để đọc.</p>' + readStats(); return; }
+  const lv = R.levels.map(l => `<tr class="w-${l.where}"><td>${px(l.p)}</td><td>${esc(l.txt)}</td><td>${esc(l.sig)}</td></tr>`).join('');
+  const out = R.out ? `<div class="rd-out ${R.out.hit == null ? '' : R.out.hit ? 'ok' : 'bad'}"><b>Buổi chiều thực tế:</b> ${esc(R.out.txt)}</div>` : '';
+  host.innerHTML = `<div class="rd-title ${leanCls(R.lean)}">${esc(R.title)}</div>
+    <p class="hint">${esc(R.sub)} Đọc từ nến 15' buổi sáng (tới 11:30); bấm từng điểm để xem nến trên biểu đồ ★.</p>
+    <ul class="rd-pts">${R.points.map(p => `<li><button data-t="${p.t}">${esc(p.txt)}</button></li>`).join('') || '<li class="note">Buổi sáng không có điểm nào nổi bật.</li>'}</ul>
+    <div class="scroll"><table class="fpx-t rd-lv"><tr><th>Giá</th><th>Ý nghĩa</th><th>Tín hiệu cần chờ</th></tr>${lv}</table></div>
+    <p class="rd-watch">${esc(R.watch)}</p>${out}${readStats()}`;
+  host.querySelectorAll('.rd-pts button').forEach(b => b.onclick = () => {
+    const t = b.dataset.t, B = V.bars;
+    let i = B.findIndex(x => x.t === t);
+    if (i < 0) B.forEach((x, k) => { if (!x.auction && mins(x.t) <= mins(t)) i = k; });
+    if (i >= 0) { select(i); $('fpxcard').scrollIntoView({behavior: 'smooth', block: 'start'}); }
+  });
+}
+
 // ---------------------------------------------------------------- Footprint cả phiên / nhiều phiên (30/09/2026)
 // Chép từ bản mẫu c:\Claude code\footprint-chart-lab người dùng duyệt: mỗi cột là một nến (Trong phiên) hoặc một phiên
 // (Nhiều phiên), ô KL theo mức giá, ô Delta/Total dưới đáy cột, dải vùng cá mập với ✓ giá chứng minh / ✕ bị phá.
@@ -968,7 +1001,14 @@ function fpx(host, cols, zones, opt) {
     el('feDropShadow', {dx: 0, dy: 0, stdDeviation: 3, 'flood-color': c, 'flood-opacity': .8}, f);
   }
   for (let r = 0; r <= rows; r++) el('line', {x1: 0, x2: W, y1: yRow(r), y2: yRow(r), stroke: 'var(--grid)'}, s);
+  const gLblLines = el('g', {});
   const selR = el('rect', {y: 2, height: H - 4, width: COL - 2, fill: 'var(--sel)', rx: 4, x: -999}, s);
+  // đường mức (hộp giá buổi sáng): trần = mép trên hàng giá, sàn = mép dưới
+  for (const l of opt.lines || []) {
+    const y = l.top ? yR(l.p) - 1 : yR(l.p) + RH + 1;
+    el('line', {x1: 0, x2: W, y1: y, y2: y, stroke: 'var(--gold)', 'stroke-width': 1.2, 'stroke-dasharray': '6 4', opacity: .85}, s);
+    el('text', {x: W - 6, y: l.top ? y - 3 : y + 11, 'text-anchor': 'end', style: 'fill:var(--gold2);font-size:10px;font-weight:600;paint-order:stroke;stroke:#0B1628;stroke-width:3px'}, gLblLines, l.lbl);
+  }
 
   const gLbl = el('g', {});
   for (const z of zones) {
@@ -1029,7 +1069,7 @@ function fpx(host, cols, zones, opt) {
     if (opt.onPick) hit.addEventListener('click', () => opt.onPick(i));
   });
 
-  s.appendChild(gLbl);
+  s.appendChild(gLbl); s.appendChild(gLblLines);
   const mark = (i, below, t, c, tip) => {
     const b = cols[i], y = below ? boxY(b) + boxH(i) + 13 : yR(b.h) - 5;
     const e = el('text', {x: x0(i) + CW / 2, y, 'text-anchor': 'middle', style: `fill:${c};font-size:13px;font-weight:700;paint-order:stroke;stroke:#0B1628;stroke-width:3px`}, s, t);
@@ -1065,7 +1105,8 @@ function drawDayFpx() {
     : `${b.t} · delta ${sgn(b.d)} · tổng ${fmt(b.vol)}`}));
   const Z = FE.zones().map(z => fpxProve({...z, ex, lbl: `${SIG[z.kind].s} ${z.t} CM ${Math.round(z.share)}%`,
     tip: `${z.name} ${px(z.lo)}${z.hi !== z.lo ? '–' + px(z.hi) : ''} · cá mập ${Math.round(z.share)} % phía chủ động`}, cols));
-  FPXD = fpx($('d-fpx'), cols, Z, {id: 'd', ex, aria: 'Footprint cả phiên', sel, onPick: i => select(i), redraw: drawDayFpx});
+  const lines = D.read ? [{p: D.read.box[1], top: true, lbl: 'trần hộp sáng ' + px(D.read.box[1])}, {p: D.read.box[0], top: false, lbl: 'sàn hộp sáng ' + px(D.read.box[0])}] : [];
+  FPXD = fpx($('d-fpx'), cols, Z, {id: 'd', ex, aria: 'Footprint cả phiên', sel, lines, onPick: i => select(i), redraw: drawDayFpx});
   fpxTable($('d-fpx-t'), Z, cols, D.partial ? 'giá cuối' : 'ATC');
 }
 

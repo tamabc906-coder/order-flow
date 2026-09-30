@@ -229,3 +229,34 @@ def test_live_built_then_removed_when_full_session_lands(job_dirs):
     assert rd.build_live(items, {}, None, "2026-09-25") == 0 and rd.LIVE_IDX.exists()   # --rebuild giữa trưa: giữ
     assert rd.build_live(items, {}, {}, "2026-09-28") == 0                               # 16:00: phiên đủ đã vào kho
     assert not rd.LIVE_IDX.exists() and not rd.LIVE_DIR.exists()
+
+
+# ---------------------------------------------------------------- bản đọc phiên sáng (30/09/2026)
+TCB30 = Path(__file__).resolve().parents[1] / "data" / "store" / "TCB" / "2026-09-30.json"
+
+
+@pytest.mark.skipif(not TCB30.exists(), reason="chưa có kho TCB 30/09")
+def test_morning_reading_tcb_20260930():
+    from flow import reading
+    rec = json.loads(TCB30.read_text(encoding="utf-8"))
+    mb, _ = signals.analyse(reading.morning(rec["bars"]), "HOSE", 15)
+    rd = reading.read_morning(mb, "HOSE")
+    assert rd["box"] == [32.35, 32.55] and rd["lean"] == 1 and rd["moves"] == -7
+    assert rd["title"].startswith("Giằng co trong hộp 32,35–32,55 · bán nhiều")
+    txt = [p["txt"] for p in rd["points"]]
+    assert "10:15 · ◆ mua bị hấp thụ ở 32,5, cá mập 70 % → trần, ✓ 3 lần (10:30, 11:00, 11:15)" in txt
+    assert any(t.startswith("10:45 · thủng giả 32,35") for t in txt)
+    assert any(t.startswith("11:15 · KL lớn nhất sáng") and "bán bị hấp thụ ở đáy" in t for t in txt)
+    full, _ = signals.analyse(rec["bars"], "HOSE", 15)
+    out = reading.read_outcome(rd, full, "HOSE")
+    assert out["atc"] == 32.55 and out["moves"] == 2 and out["hit"] is True and out["base"] is False
+
+
+def test_morning_reading_quiet_session_no_crash():
+    from flow import reading
+    t = [tk("09:20:00", 25.0, 1000, "PS", 1000), tk("09:40:00", 25.05, 1000, "PB", 2000),
+         tk("10:10:00", 25.0, 1000, "PS", 3000), tk("10:40:00", 25.05, 1000, "PS", 4000)]
+    mb, _ = signals.analyse(reading.morning(session_record(t)["bars"]), "HOSE", 15)
+    rd = reading.read_morning(mb, "HOSE")
+    assert rd["title"] and rd["levels"] and rd["watch"].startswith("Canh:")
+    assert reading.read_outcome(rd, mb, "HOSE") is None      # chưa có buổi chiều
