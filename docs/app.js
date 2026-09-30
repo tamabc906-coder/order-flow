@@ -1062,19 +1062,23 @@ function fpx(host, cols, zones, opt) {
       // ATO/ATC chỉ khớp một giá: không tô POC (kem) để khỏi nhầm với POC nến thường; luôn là ô xám
       const v = se + bu + xx, y = yRow(r), poc = r === b.poc && !b.auction;
       const q = se + bu ? (bu - se) / (se + bu) : 0;
-      const fill = poc ? '#F1E6D0' : b.auction || Math.abs(q) < .1 ? 'var(--x)' : q > 0 ? 'var(--buy)' : 'var(--sell)';
-      el('rect', {x: X, y: y + .5, width: CW, height: RH - 1, fill, 'fill-opacity': poc ? .92 : b.auction ? .55 : .12 + .7 * Math.pow(v / mx, .7), rx: 2}, g);
+      const fill = poc ? '#FFE14D' : b.auction || Math.abs(q) < .1 ? 'var(--x)' : q > 0 ? 'var(--buy)' : 'var(--sell)';
+      el('rect', {x: X, y: y + .5, width: CW, height: RH - 1, fill, 'fill-opacity': poc ? 1 : b.auction ? .55 : .12 + .7 * Math.pow(v / mx, .7), rx: 2,
+        ...(poc ? {stroke: '#0B1628', 'stroke-width': 1} : {})}, g);
+      if (poc) el('path', {d: `M${X + CW + 6} ${y + RH / 2 - 4}L${X + CW + 1} ${y + RH / 2}L${X + CW + 6} ${y + RH / 2 + 4}Z`, fill: '#FFE14D'}, g);
       if (b.imbR.has(r)) el('rect', {x: X + .75, y: y + 1.25, width: CW - 1.5, height: RH - 2.5, fill: 'none', stroke: 'var(--gold2)', 'stroke-width': 1.5, rx: 2}, g);
       const txt = b.auction ? kf(xx) : FPX.mode === 'bs' ? `${kf(se)}×${kf(bu)}` : FPX.mode === 'd' ? kfs(bu - se) : kf(v);
       el('text', {x: X + CW / 2, y: y + RH / 2 + FS / 2 - 1, 'text-anchor': 'middle',
-        style: `font-size:${FS}px;fill:${poc ? '#0B1628' : 'var(--ink)'};font-weight:${poc ? 700 : 400}`}, g, txt);
+        style: `font-size:${FS}px;fill:${poc ? '#0B1628' : 'var(--ink)'};font-weight:${poc ? 800 : 400}`}, g, txt);
     }
     if (FPX.va && b.va) {
       // vạch trắng ở mép trên hàng VAH và mép dưới hàng VAL (như nền tảng footprint)
       for (const [r, top, lb] of [[b.va[0], true, 'VAH'], [b.va[1], false, 'VAL']]) {
         const y = top ? yRow(r) : yRow(r) + RH;
-        el('line', {x1: X - 2, x2: X + CW + 2, y1: y, y2: y, stroke: '#F1E6D0', 'stroke-width': 2}, g);
-        el('text', {x: X + 2, y: top ? y - 2 : y + 8, style: 'font-size:7.5px;font-weight:700;fill:#F1E6D0;paint-order:stroke;stroke:#0B1628;stroke-width:2.5px'}, g, lb);
+        el('line', {x1: X - 4, x2: X + CW + 4, y1: y, y2: y, stroke: '#FF9F1C', 'stroke-width': 3, 'stroke-linecap': 'round'}, g);
+        const ly = top ? y - 10 : y + 1.5;
+        el('rect', {x: X + 1, y: ly, width: 21, height: 9, rx: 2, fill: '#FF9F1C'}, g);
+        el('text', {x: X + 11.5, y: ly + 7, 'text-anchor': 'middle', style: 'font-size:7.5px;font-weight:800;fill:#0B1628'}, g, lb);
       }
     }
     if (b.auction) el('rect', {x: X - 1, y: yR(b.h) - 1, width: CW + 2, height: yR(b.l) - yR(b.h) + RH + 2, fill: 'none',
