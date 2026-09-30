@@ -945,7 +945,7 @@ function drawRead() {
 // Chép từ bản mẫu c:\Claude code\footprint-chart-lab người dùng duyệt: mỗi cột là một nến (Trong phiên) hoặc một phiên
 // (Nhiều phiên), ô KL theo mức giá, ô Delta/Total dưới đáy cột, dải vùng cá mập với ✓ giá chứng minh / ✕ bị phá.
 // cols[i] = {t, o, h, l, c, lv:[[giá, bán, mua, x]], imb, d, vol, auction, tip}; zones[j] = {side, lo, hi, k, lbl, tip}.
-const FPX = {mode: ['vol', 'bs', 'd'].includes(LS.get('of.fpx.mode')) ? LS.get('of.fpx.mode') : 'vol'};
+const FPX = {mode: ['vol', 'bs', 'd'].includes(LS.get('of.fpx.mode')) ? LS.get('of.fpx.mode') : 'vol', va: LS.get('of.fpx.va') !== '0'};
 const kf = v => { const a = Math.abs(v); return a >= 1e6 ? (a / 1e6).toFixed(a >= 1e7 ? 1 : 2) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(a >= 1e5 ? 0 : a >= 1e4 ? 1 : 2) + 'K' : String(a); };
 const kfs = v => (v > 0 ? '+' : v < 0 ? '−' : '') + kf(v);
 const tickOf = (p, ex) => (ex || 'HOSE').toUpperCase() !== 'HOSE' ? .1 : p < 10 ? .01 : p < 50 ? .05 : .1;
@@ -979,8 +979,12 @@ function fpx(host, cols, zones, opt) {
   const E = 1e-9, n = cols.length;
   const bar = document.createElement('div'); bar.className = 'chips fpx-bar'; host.appendChild(bar);
   bar.innerHTML = [['vol', 'KL'], ['bs', 'bán×mua'], ['d', 'delta']].map(([v, t]) =>
-    `<button class="chip ${FPX.mode === v ? 'on' : ''}" data-m="${v}">${t}</button>`).join('');
-  bar.querySelectorAll('.chip').forEach(b => b.onclick = () => { FPX.mode = b.dataset.m; LS.set('of.fpx.mode', FPX.mode); opt.redraw(); });
+    `<button class="chip ${FPX.mode === v ? 'on' : ''}" data-m="${v}">${t}</button>`).join('') +
+    `<button class="chip ${FPX.va ? 'on' : ''}" data-va="1" title="Vùng giá trị 70 % KL khớp liên tục của từng cột">VAH·VAL</button>`;
+  bar.querySelectorAll('.chip').forEach(b => b.onclick = () => {
+    if (b.dataset.va) { FPX.va = !FPX.va; LS.set('of.fpx.va', FPX.va ? '1' : '0'); } else { FPX.mode = b.dataset.m; LS.set('of.fpx.mode', FPX.mode); }
+    opt.redraw();
+  });
   const wrap = document.createElement('div'); wrap.className = 'fpx-wrap'; host.appendChild(wrap);
   const axH = document.createElement('div'); axH.className = 'fpx-axis'; wrap.appendChild(axH);
   const sc = document.createElement('div'); sc.className = 'fpx-scroll'; wrap.appendChild(sc);
@@ -995,8 +999,22 @@ function fpx(host, cols, zones, opt) {
     const m = new Map();
     for (const [p, se, bu, x] of b.lv) { const r = row(p), a = m.get(r) || [r, 0, 0, 0]; a[1] += se; a[2] += bu; a[3] += x; m.set(r, a); }
     const rl = [...m.values()].sort((a, c) => a[0] - c[0]);
-    const poc = rl.reduce((a, c) => c[1] + c[2] + c[3] > a[1] + a[2] + a[3] ? c : a, rl[0])[0];
-    return {...b, rl, poc, imbR: new Set((b.imb || []).map(([p]) => row(p)))};
+    // POC + vùng giá trị 70 % tính trên KL khớp liên tục (bỏ ATO/ATC): ATC lớn không kéo POC về giá đóng cửa.
+    // Cột khớp định kỳ (ATO/ATC) chỉ một giá → không có VA.
+    const cv = r => b.auction ? r[1] + r[2] + r[3] : r[1] + r[2];
+    const poc = rl.reduce((a, c) => cv(c) > cv(a) ? c : a, rl[0])[0];
+    let va = null;
+    if (!b.auction && rl.length >= 3) {
+      const tot = rl.reduce((t, r) => t + cv(r), 0);
+      let i = rl.findIndex(r => r[0] === poc), j = i, acc = cv(rl[i]);
+      while (acc < .7 * tot && (i > 0 || j < rl.length - 1)) {
+        // rl sắp theo hàng tăng dần = giá giảm dần: i-1 là mức cao hơn, j+1 là mức thấp hơn
+        const up = i > 0 ? cv(rl[i - 1]) : -1, dn = j < rl.length - 1 ? cv(rl[j + 1]) : -1;
+        if (up >= dn) acc += cv(rl[--i]); else acc += cv(rl[++j]);
+      }
+      va = [rl[i][0], rl[j][0]];            // [hàng VAH, hàng VAL]
+    }
+    return {...b, rl, poc, va, imbR: new Set((b.imb || []).map(([p]) => row(p)))};
   });
   const RH = rows > 40 ? 13 : 17, FS = RH > 14 ? 10 : 9;
   const CW = FPX.mode === 'bs' ? 80 : 62, KW = 14, COL = CW + KW + 10, BH = 30, BT = 11;
@@ -1051,6 +1069,14 @@ function fpx(host, cols, zones, opt) {
       el('text', {x: X + CW / 2, y: y + RH / 2 + FS / 2 - 1, 'text-anchor': 'middle',
         style: `font-size:${FS}px;fill:${poc ? '#0B1628' : 'var(--ink)'};font-weight:${poc ? 700 : 400}`}, g, txt);
     }
+    if (FPX.va && b.va) {
+      // vạch trắng ở mép trên hàng VAH và mép dưới hàng VAL (như nền tảng footprint)
+      for (const [r, top, lb] of [[b.va[0], true, 'VAH'], [b.va[1], false, 'VAL']]) {
+        const y = top ? yRow(r) : yRow(r) + RH;
+        el('line', {x1: X - 2, x2: X + CW + 2, y1: y, y2: y, stroke: '#F1E6D0', 'stroke-width': 2}, g);
+        el('text', {x: X + 2, y: top ? y - 2 : y + 8, style: 'font-size:7.5px;font-weight:700;fill:#F1E6D0;paint-order:stroke;stroke:#0B1628;stroke-width:2.5px'}, g, lb);
+      }
+    }
     if (b.auction) el('rect', {x: X - 1, y: yR(b.h) - 1, width: CW + 2, height: yR(b.l) - yR(b.h) + RH + 2, fill: 'none',
       stroke: b.t === 'ATC' ? 'var(--gold)' : 'var(--x)', 'stroke-width': 1.2, rx: 3}, g);
     // nến mảnh; không có giá mở (bản ghi cũ) → chỉ râu + vạch đóng
@@ -1081,7 +1107,8 @@ function fpx(host, cols, zones, opt) {
     el('text', {x: X + CW / 2, y: H - 8, 'text-anchor': 'middle', style: b.t === 'ATC' || b.live ? 'fill:var(--gold2)' : ''}, g,
       b.t === 'ATC' ? 'ATC ' + px(b.c) : b.t);
     const hit = el('rect', {x: X - 4, y: 0, width: COL, height: H, fill: 'transparent', style: opt.onPick ? 'cursor:pointer' : ''}, s);
-    if (b.tip) el('title', {}, hit, b.tip);
+    const pr = r => px(+(hiP - r * step).toFixed(2));
+    if (b.tip) el('title', {}, hit, b.tip + (b.va ? ` · VA ${pr(b.va[1])}–${pr(b.va[0])} · POC ${pr(b.poc)}` : ''));
     if (opt.onPick) hit.addEventListener('click', () => opt.onPick(i));
   });
 
