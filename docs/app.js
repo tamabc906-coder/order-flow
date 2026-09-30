@@ -1062,12 +1062,13 @@ function fpx(host, cols, zones, opt) {
       // ATO/ATC chỉ khớp một giá: không tô POC (kem) để khỏi nhầm với POC nến thường; luôn là ô xám
       const v = se + bu + xx, y = yRow(r), poc = r === b.poc && !b.auction;
       const q = se + bu ? (bu - se) / (se + bu) : 0;
-      const fill = poc ? '#F1E6D0' : b.auction || Math.abs(q) < .1 ? 'var(--x)' : q > 0 ? 'var(--buy)' : 'var(--sell)';
-      el('rect', {x: X, y: y + .5, width: CW, height: RH - 1, fill, 'fill-opacity': poc ? .92 : b.auction ? .55 : .12 + .7 * Math.pow(v / mx, .7), rx: 2}, g);
+      const fill = b.auction || Math.abs(q) < .1 ? 'var(--x)' : q > 0 ? 'var(--buy)' : 'var(--sell)';
+      el('rect', {x: X, y: y + .5, width: CW, height: RH - 1, fill, 'fill-opacity': b.auction ? .55 : .12 + .7 * Math.pow(v / mx, .7), rx: 2}, g);
+      if (poc) el('circle', {cx: X + CW - 5, cy: y + RH / 2, r: 3.2, fill: '#4DB8FF', stroke: '#0B1628', 'stroke-width': 1}, g);
       if (b.imbR.has(r)) el('rect', {x: X + .75, y: y + 1.25, width: CW - 1.5, height: RH - 2.5, fill: 'none', stroke: 'var(--gold2)', 'stroke-width': 1.5, rx: 2}, g);
       const txt = b.auction ? kf(xx) : FPX.mode === 'bs' ? `${kf(se)}×${kf(bu)}` : FPX.mode === 'd' ? kfs(bu - se) : kf(v);
       el('text', {x: X + CW / 2, y: y + RH / 2 + FS / 2 - 1, 'text-anchor': 'middle',
-        style: `font-size:${FS}px;fill:${poc ? '#0B1628' : 'var(--ink)'};font-weight:${poc ? 700 : 400}`}, g, txt);
+        style: `font-size:${FS}px;fill:var(--ink)`}, g, txt);
     }
     if (FPX.va && b.va) {
       // vạch trắng ở mép trên hàng VAH và mép dưới hàng VAL (như nền tảng footprint)
