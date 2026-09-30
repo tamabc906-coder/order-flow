@@ -1,12 +1,12 @@
 {
- "run_at": "2026-09-30T12:20:56+07:00",
+ "run_at": "2026-09-30T12:50:41+07:00",
  "day": "2026-09-29",
  "symbols": 39,
  "built": 39,
  "watchlist": "kingstock",
  "dnse_missing": [],
  "gaps": {},
- "partial": 39,
+ "partial": 0,
  "new": [],
  "failed": {},
  "unsettled": [

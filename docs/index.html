@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=8">
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 <header class="top">
@@ -38,6 +38,15 @@
       <div class="chips tf" id="d-tf" role="group" aria-label="Khung nến" style="margin:0"></div>
       <label title="Nỗ lực mạnh khi delta % KL của nến lệch khỏi trung bình phiên ít nhất ngần này điểm">Ngưỡng nỗ lực
         <input type="range" id="fe-thr" min="5" max="40" step="1" value="15"> <b id="fe-thr-v" class="gold">15</b></label>
+    </div>
+
+    <div class="card fpx" id="fpxcard">
+      <h3><span class="num">★</span>Footprint cả phiên · vùng cá mập</h3>
+      <p class="hint">Mỗi cột là một nến của khung đang chọn: ô KL theo mức giá (đỏ bán chủ động trội, xanh mua trội, ô trắng POC,
+        viền vàng imbalance), nến mảnh bên phải, ô Delta/Total dưới đáy. Dải ngang là vùng cá mập; ô viền sáng = nến chạm lại vùng,
+        <b class="gold">✓</b> = giá chứng minh vùng, <b class="neg">✕</b> = vùng bị phá. Bấm một cột để chọn nến. <a href="#guide" class="gold">Cách đọc</a></p>
+      <div id="d-fpx"></div>
+      <div id="d-fpx-t"></div>
     </div>
 
     <div class="fe">
@@ -127,6 +136,14 @@
   <!-- ③ Nhiều phiên -->
   <section class="tab" id="t-days">
     <div class="ctrl"><select id="m-sym" aria-label="Mã"></select><span class="pill" id="m-pill"></span></div>
+    <div class="card fpx">
+      <h3><span class="num">★</span>Footprint nhiều phiên · vùng cá mập</h3>
+      <p class="hint">Mỗi cột là một phiên: ô KL theo mức giá (giá điều chỉnh), nến phiên bên phải, ô Delta/Total dưới đáy. Dải ngang là mức
+        cá mập mua ròng (▲ vùng đỡ) hoặc bán ròng (▼ vùng chặn) lớn nhất của một phiên, khi mức đó chiếm ≥ 20 % KL cá mập phiên; tối đa 6 vùng mạnh nhất.
+        <b class="gold">✓</b> = phiên sau chạm vùng rồi đóng ra ngoài đúng hướng, <b class="neg">✕</b> = giá đóng cửa xuyên vùng.</p>
+      <div id="m-fpx"></div>
+      <div id="m-fpx-t"></div>
+    </div>
     <div class="card">
       <h3><span class="num">1</span>Footprint từng phiên</h3>
       <p class="hint">Mỗi cột là một phiên: đỏ sang trái là bán chủ động, xanh sang phải là mua chủ động, theo từng mức giá
@@ -321,6 +338,22 @@
         <li>Đây là bản đồ mô tả, không phải tín hiệu mua bán. "Giữ/phá" là thứ nên đo lại khi kho đủ dài.</li>
       </ul>
     </div>
+    <div class="card">
+      <h3><span class="num">7</span>Đọc biểu đồ Footprint cả phiên / nhiều phiên (★)</h3>
+      <p class="hint">Dựng theo kiểu "Let Price Prove the Level First": không vào lệnh khi giá mới chạm vùng, chờ giá phản ứng ở vùng đã.</p>
+      <dl class="defs">
+        <dt>Cột ô</dt><dd>Mỗi ô là một bước giá, số là tổng KL khớp ở mức đó. <span>Nút KL / bán×mua / delta đổi số trong ô.</span></dd>
+        <dt style="color:var(--sell)">Ô đỏ / <span style="color:var(--buy)">xanh</span></dt><dd>Bán chủ động trội / mua chủ động trội; ô xám = hai bên gần bằng nhau. Ô càng đậm KL càng lớn so với ô lớn nhất của cột.</dd>
+        <dt>Ô trắng</dt><dd>POC: mức KL lớn nhất của cột.</dd>
+        <dt class="gold">Ô viền vàng</dt><dd>Imbalance: một bên lấn bên kia theo đường chéo (chỉ có ở Trong phiên).</dd>
+        <dt class="gold">▸ và vạch chấm</dt><dd>▸ = giá mở; vạch chấm kéo từ giá đóng sang cột sau để thấy cột sau mở ở đâu.</dd>
+        <dt>Ô Delta / Total</dt><dd>Delta = mua − bán chủ động, Total = KL cả cột. <span>Viền mờ: cột không chạm vùng nào. Viền sáng <b class="neg">đỏ</b> / <b class="pos">xanh</b> kèm dòng "chạm vùng CM": cột chạm lại vùng cá mập với delta âm / dương. Viền vàng: ATC.</span></dd>
+        <dt style="color:#2DC8BE">Dải ngang</dt><dd>Vùng cá mập. Trong phiên: dấu hiệu (xếp chồng, hấp thụ, cạn kiệt) mà cá mập chiếm ≥ 50 % phía chủ động. Nhiều phiên: mức cá mập mua/bán ròng lớn nhất của phiên. Xanh ngọc = vùng đỡ, hồng = vùng chặn. Dải kéo tới khi giá đóng xuyên qua, kể cả ở ATC.</dd>
+        <dt class="gold">✓</dt><dd>Giá chứng minh vùng: cột chạm vùng đỡ mà đóng lại trên vùng và delta không âm, hoặc bán dồn ở đáy ≥ 40 % KL cột mà không thủng vùng. Vùng chặn đối xứng.</dd>
+        <dt class="neg">✕</dt><dd>Vùng bị phá: giá đóng xuyên qua vùng.</dd>
+      </dl>
+      <p class="gp"><b>✓ / ✕ chỉ mô tả chuyện đã xảy ra, chưa kiểm định.</b> Bảng dưới biểu đồ ghi số bước giá tới cuối khung tính từ lần chạm đầu và từ lần ✓ để tự theo dõi.</p>
+    </div>
   </section>
 </div>
 
@@ -332,7 +365,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 <script>
 if ('serviceWorker' in navigator) {
   // Bản mới tiếp quản (skipWaiting + claim) → tải lại một lần để thấy ngay, không phải mở app hai lần

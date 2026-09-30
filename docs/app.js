@@ -223,6 +223,7 @@ function showTF() {
   });
   drawIntraday();
   FE.prep();
+  drawDayFpx();
   const first = V.sigs.length ? V.sigs[V.sigs.length - 1].i
     : V.bars.reduce((m, b, i) => Math.abs(b.d) > Math.abs(V.bars[m].d) ? i : m, 0);
   select(first);
@@ -321,6 +322,7 @@ function select(i) {
   sel = Math.max(0, Math.min(B.length - 1, i));
   const b = B[sel];
   if (chart) chart.selRect.setAttribute('x', chart.L + chart.cw * sel);
+  if (FPXD) FPXD.pick(sel);
   $('fp-title').textContent = 'Nến ' + label(b);
   $('fp-ohlc').innerHTML = `M ${px(b.o)} · C ${px(b.h)} · T ${px(b.l)} · Đ ${px(b.c)} · KL ${fmt(b.vol)} · ` +
     (b.auction ? 'khớp định kỳ, không có bên chủ động' : `delta <b class="${b.d >= 0 ? 'pos' : 'neg'}">${sgn(b.d)}</b>`) +
@@ -884,9 +886,210 @@ const FE = (() => {
       drawWhale(); drawStrip(); drawVerdict(); drawLadder(); drawQuad();
     },
     setThr(v) { F.thr = v; LS.set('of.fe.thr', v); prep(); this.draw(); },
+    // vùng cá mập (≥ 50 % phía chủ động) cho biểu đồ Footprint cả phiên
+    zones() { return ready() ? whaleZones().filter(z => z.whale) : []; },
   };
 })();
 $('fe-thr').oninput = e => FE.setThr(+e.target.value);
+
+// ---------------------------------------------------------------- Footprint cả phiên / nhiều phiên (30/09/2026)
+// Chép từ bản mẫu c:\Claude code\footprint-chart-lab người dùng duyệt: mỗi cột là một nến (Trong phiên) hoặc một phiên
+// (Nhiều phiên), ô KL theo mức giá, ô Delta/Total dưới đáy cột, dải vùng cá mập với ✓ giá chứng minh / ✕ bị phá.
+// cols[i] = {t, o, h, l, c, lv:[[giá, bán, mua, x]], imb, d, vol, auction, tip}; zones[j] = {side, lo, hi, k, lbl, tip}.
+const FPX = {mode: ['vol', 'bs', 'd'].includes(LS.get('of.fpx.mode')) ? LS.get('of.fpx.mode') : 'vol'};
+const kf = v => { const a = Math.abs(v); return a >= 1e6 ? (a / 1e6).toFixed(a >= 1e7 ? 1 : 2) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(a >= 1e5 ? 0 : a >= 1e4 ? 1 : 2) + 'K' : String(a); };
+const kfs = v => (v > 0 ? '+' : v < 0 ? '−' : '') + kf(v);
+const tickOf = (p, ex) => (ex || 'HOSE').toUpperCase() !== 'HOSE' ? .1 : p < 10 ? .01 : p < 50 ? .05 : .1;
+
+// Luật chứng minh (lab `prove`): vùng đỡ = cột sau chạm vùng (l ≤ hi) mà đóng trên hi và (delta ≥ 0 hoặc ô đáy bán
+// ≥ 40 % KL cột, không thủng lo); đóng dưới lo (kể cả ATC) → phá. Vùng chặn đối xứng.
+function fpxProve(z, cols) {
+  const E = 1e-9, up = z.side === 'up', touches = [], proofs = [];
+  let broke = null;
+  const o = cols[z.k];
+  if (up ? o.c < z.lo - E : o.c > z.hi + E) broke = z.k;
+  for (let i = z.k + 1; i < cols.length && broke == null; i++) {
+    const b = cols[i];
+    if (b.auction) { if (b.t === 'ATC' && (up ? b.c < z.lo - E : b.c > z.hi + E)) broke = i; continue; }
+    if (!(up ? b.l <= z.hi + E : b.h >= z.lo - E)) continue;
+    touches.push(i);
+    if (up ? b.c < z.lo - E : b.c > z.hi + E) { broke = i; break; }
+    const edge = up ? b.lv[b.lv.length - 1] : b.lv[0];
+    const absorbed = up ? edge[1] >= .4 * b.vol && b.l >= z.lo - E : edge[2] >= .4 * b.vol && b.h <= z.hi + E;
+    if ((up ? b.c > z.hi + E : b.c < z.lo - E) && ((up ? b.d >= 0 : b.d <= 0) || absorbed)) proofs.push({i, absorbed});
+  }
+  const last = cols[cols.length - 1].c, st = tickOf(z.hi, z.ex), dir = up ? 1 : -1;
+  const steps = i => i == null ? null : Math.round((last - cols[i].c) / st) * dir;
+  return {...z, touches, proofs, broke, fromTouch: steps(touches[0]), fromProof: steps(proofs.length ? proofs[0].i : null)};
+}
+
+// host nhận chip chế độ số + khung cuộn; trả {pick(i)} để tô cột đang chọn từ ngoài
+function fpx(host, cols, zones, opt) {
+  host.innerHTML = '';
+  if (!cols.length) { host.innerHTML = '<p class="empty">Chưa có dữ liệu.</p>'; return {pick() {}}; }
+  const E = 1e-9, n = cols.length;
+  const bar = document.createElement('div'); bar.className = 'chips fpx-bar'; host.appendChild(bar);
+  bar.innerHTML = [['vol', 'KL'], ['bs', 'bán×mua'], ['d', 'delta']].map(([v, t]) =>
+    `<button class="chip ${FPX.mode === v ? 'on' : ''}" data-m="${v}">${t}</button>`).join('');
+  bar.querySelectorAll('.chip').forEach(b => b.onclick = () => { FPX.mode = b.dataset.m; LS.set('of.fpx.mode', FPX.mode); opt.redraw(); });
+  const wrap = document.createElement('div'); wrap.className = 'fpx-wrap'; host.appendChild(wrap);
+  const axH = document.createElement('div'); axH.className = 'fpx-axis'; wrap.appendChild(axH);
+  const sc = document.createElement('div'); sc.className = 'fpx-scroll'; wrap.appendChild(sc);
+
+  // hàng giá: bước giá của sàn, gộp thêm khi quá 90 hàng (nhiều phiên biên độ rộng); mọi mức gắn về hàng gần nhất
+  let hiP = Math.max(...cols.map(b => b.h)), loP = Math.min(...cols.map(b => b.l));
+  const tick = tickOf(loP, opt.ex), mult = Math.max(1, Math.ceil((hiP - loP) / tick / 90)), step = tick * mult;
+  hiP = Math.ceil(hiP / step - E) * step; loP = Math.floor(loP / step + E) * step;
+  const rows = Math.round((hiP - loP) / step) + 1;
+  const row = p => Math.max(0, Math.min(rows - 1, Math.round((hiP - p) / step)));
+  const C = cols.map(b => {
+    const m = new Map();
+    for (const [p, se, bu, x] of b.lv) { const r = row(p), a = m.get(r) || [r, 0, 0, 0]; a[1] += se; a[2] += bu; a[3] += x; m.set(r, a); }
+    const rl = [...m.values()].sort((a, c) => a[0] - c[0]);
+    const poc = rl.reduce((a, c) => c[1] + c[2] + c[3] > a[1] + a[2] + a[3] ? c : a, rl[0])[0];
+    return {...b, rl, poc, imbR: new Set((b.imb || []).map(([p]) => row(p)))};
+  });
+  const RH = rows > 40 ? 13 : 17, FS = RH > 14 ? 10 : 9;
+  const CW = FPX.mode === 'bs' ? 80 : 62, KW = 14, COL = CW + KW + 10, BH = 30, BT = 11;
+  const T = 8, BOT = BH + BT + 44, H = T + rows * RH + BOT, W = n * COL + 12;
+  const yRow = r => T + r * RH, yR = p => yRow(row(p)), yC = p => yR(p) + RH / 2, x0 = i => 6 + i * COL;
+  const touchSet = new Set(zones.flatMap(z => z.touches));
+  const boxY = b => yR(b.l) + RH + 4;
+  const boxH = i => BH + (touchSet.has(i) && !cols[i].auction ? BT : 0);
+
+  const sa = el('svg', {width: 46, height: H, viewBox: `0 0 46 ${H}`}, axH);
+  const every = Math.max(1, Math.ceil(14 / RH));
+  for (let r = 0; r < rows; r += every) el('text', {x: 42, y: yRow(r) + RH / 2 + 3.5, 'text-anchor': 'end', style: `font-size:${FS}px`}, sa, px(+(hiP - r * step).toFixed(2)));
+
+  const s = el('svg', {width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opt.aria}, sc);
+  const defs = el('defs', {}, s);
+  for (const [id, c] of [['b', '#3DBE7A'], ['s', '#E5575C']]) {
+    const f = el('filter', {id: `fpx-glow-${opt.id}-${id}`, x: '-30%', y: '-60%', width: '160%', height: '220%'}, defs);
+    el('feDropShadow', {dx: 0, dy: 0, stdDeviation: 3, 'flood-color': c, 'flood-opacity': .8}, f);
+  }
+  for (let r = 0; r <= rows; r++) el('line', {x1: 0, x2: W, y1: yRow(r), y2: yRow(r), stroke: 'var(--grid)'}, s);
+  const selR = el('rect', {y: 2, height: H - 4, width: COL - 2, fill: 'var(--sel)', rx: 4, x: -999}, s);
+
+  const gLbl = el('g', {});
+  for (const z of zones) {
+    const endK = z.broke != null ? z.broke : n - 1, up = z.side === 'up';
+    const xa = x0(z.k), xb = x0(endK) + COL - 4, ya = yR(z.hi) - 2, yb = yR(z.lo) + RH + 2;
+    const band = el('rect', {x: xa, y: ya, width: xb - xa, height: yb - ya, fill: up ? 'var(--zup)' : 'var(--zdn)', rx: 3,
+      stroke: up ? 'var(--zupl)' : 'var(--zdnl)', 'stroke-opacity': .55}, s);
+    el('title', {}, band, z.tip);
+    // nhãn nằm trên dải, ngay sau cột sinh vùng: không đè ô Delta/Total
+    el('text', {x: xa + COL + 2, y: (ya + yb) / 2 + 3.5, style: `fill:${up ? 'var(--zupl)' : 'var(--zdnl)'};font-size:10px;font-weight:700;paint-order:stroke;stroke:#0B1628;stroke-width:3px`}, gLbl, z.lbl);
+  }
+
+  C.forEach((b, i) => {
+    const g = el('g', {}, s), X = x0(i);
+    const mx = Math.max(1, ...b.rl.map(r => r[1] + r[2] + r[3]));
+    for (const [r, se, bu, xx] of b.rl) {
+      const v = se + bu + xx, y = yRow(r), poc = r === b.poc;
+      const q = se + bu ? (bu - se) / (se + bu) : 0;
+      const fill = poc ? '#F1E6D0' : b.auction || Math.abs(q) < .1 ? 'var(--x)' : q > 0 ? 'var(--buy)' : 'var(--sell)';
+      el('rect', {x: X, y: y + .5, width: CW, height: RH - 1, fill, 'fill-opacity': poc ? .92 : .12 + .7 * Math.pow(v / mx, .7), rx: 2}, g);
+      if (b.imbR.has(r)) el('rect', {x: X + .75, y: y + 1.25, width: CW - 1.5, height: RH - 2.5, fill: 'none', stroke: 'var(--gold2)', 'stroke-width': 1.5, rx: 2}, g);
+      const txt = b.auction ? kf(xx) : FPX.mode === 'bs' ? `${kf(se)}×${kf(bu)}` : FPX.mode === 'd' ? kfs(bu - se) : kf(v);
+      el('text', {x: X + CW / 2, y: y + RH / 2 + FS / 2 - 1, 'text-anchor': 'middle',
+        style: `font-size:${FS}px;fill:${poc ? '#0B1628' : 'var(--ink)'};font-weight:${poc ? 700 : 400}`}, g, txt);
+    }
+    if (b.auction) el('rect', {x: X - 1, y: yR(b.h) - 1, width: CW + 2, height: yR(b.l) - yR(b.h) + RH + 2, fill: 'none',
+      stroke: b.t === 'ATC' ? 'var(--gold)' : 'var(--x)', 'stroke-width': 1.2, rx: 3}, g);
+    // nến mảnh; không có giá mở (bản ghi cũ) → chỉ râu + vạch đóng
+    const cx = X + CW + KW / 2 + 2, col = b.auction ? 'var(--x)' : b.o == null ? 'var(--mute)' : b.c >= b.o ? 'var(--buy)' : 'var(--sell)';
+    el('line', {x1: cx, x2: cx, y1: yR(b.h) + 2, y2: yR(b.l) + RH - 2, stroke: col, 'stroke-width': 1.2}, g);
+    const yc = yC(b.c);
+    if (b.o != null) {
+      const yo = yC(b.o);
+      el('rect', {x: cx - 3.5, y: Math.min(yo, yc) - 2, width: 7, height: Math.abs(yo - yc) + 4, fill: col, rx: 1}, g);
+      el('path', {d: `M${X - 5} ${yo - 4}L${X} ${yo}L${X - 5} ${yo + 4}Z`, fill: 'var(--gold2)'}, g);
+    } else el('line', {x1: cx - 4, x2: cx + 4, y1: yc, y2: yc, stroke: col, 'stroke-width': 2}, g);
+    if (i < n - 1) el('line', {x1: X + CW, x2: X + COL + 2, y1: yc, y2: yc, stroke: 'var(--gold2)', 'stroke-dasharray': '1.5 2.5', 'stroke-width': 1.2}, g);
+    // ô Delta / Total: chạm vùng → viền sáng theo dấu delta + dòng "chạm vùng CM"
+    const by = boxY(b), bw = CW + KW + 2, touched = touchSet.has(i) && !b.auction;
+    const edge = b.t === 'ATC' ? 'var(--gold)' : touched ? (b.d >= 0 ? 'var(--buy)' : 'var(--sell)') : 'var(--line)';
+    const box = el('rect', {x: X, y: by, width: bw, height: boxH(i), fill: '#0B1628', 'fill-opacity': .92, rx: 3,
+      stroke: edge, 'stroke-width': touched || b.t === 'ATC' ? 2 : 1}, g);
+    if (touched) box.setAttribute('filter', `url(#fpx-glow-${opt.id}-${b.d >= 0 ? 'b' : 's'})`);
+    const tx = (x, y, t, st, end) => el('text', {x, y, 'text-anchor': end ? 'end' : 'start', style: 'font-size:10px;' + st}, g, t);
+    if (b.auction) {
+      tx(X + 4, by + 12, 'Khớp', 'fill:var(--mute)'); tx(X + bw - 4, by + 12, kf(b.vol), 'fill:var(--ink)', 1);
+      tx(X + 4, by + 25, b.t === 'ATC' ? 'đóng cửa' : 'mở cửa', 'fill:var(--dim)');
+    } else {
+      tx(X + 4, by + 12, 'Delta', 'fill:var(--mute)'); tx(X + bw - 4, by + 12, kfs(b.d), `fill:${b.d >= 0 ? 'var(--buy)' : 'var(--sell)'};font-weight:600`, 1);
+      tx(X + 4, by + 25, 'Total', 'fill:var(--mute)'); tx(X + bw - 4, by + 25, kf(b.vol), 'fill:var(--ink)', 1);
+      if (touched) tx(X + 4, by + 37, 'chạm vùng CM', `fill:${b.d >= 0 ? 'var(--buy)' : 'var(--sell)'};font-size:9px`);
+    }
+    el('text', {x: X + CW / 2, y: H - 8, 'text-anchor': 'middle', style: b.t === 'ATC' || b.live ? 'fill:var(--gold2)' : ''}, g,
+      b.t === 'ATC' ? 'ATC ' + px(b.c) : b.t);
+    const hit = el('rect', {x: X - 4, y: 0, width: COL, height: H, fill: 'transparent', style: opt.onPick ? 'cursor:pointer' : ''}, s);
+    if (b.tip) el('title', {}, hit, b.tip);
+    if (opt.onPick) hit.addEventListener('click', () => opt.onPick(i));
+  });
+
+  s.appendChild(gLbl);
+  const mark = (i, below, t, c, tip) => {
+    const b = cols[i], y = below ? boxY(b) + boxH(i) + 13 : yR(b.h) - 5;
+    const e = el('text', {x: x0(i) + CW / 2, y, 'text-anchor': 'middle', style: `fill:${c};font-size:13px;font-weight:700;paint-order:stroke;stroke:#0B1628;stroke-width:3px`}, s, t);
+    if (tip) el('title', {}, e, tip);
+  };
+  for (const z of zones) {
+    const up = z.side === 'up';
+    for (const {i, absorbed} of z.proofs) mark(i, up, '✓', 'var(--gold2)', `Giá chứng minh vùng ${z.lbl}: ${absorbed ? 'lệnh dồn ở rìa bị hấp thụ' : 'delta cùng hướng'}, đóng ra khỏi vùng`);
+    if (z.broke != null) mark(z.broke, up, '✕', 'var(--sell)', `Vùng ${z.lbl} bị phá: giá đóng xuyên qua vùng`);
+  }
+  requestAnimationFrame(() => { sc.scrollLeft = sc.scrollWidth; });   // mở ở cuối (nến/phiên mới nhất, ATC)
+  const pick = i => { selR.setAttribute('x', i == null ? -999 : x0(i) - 5); };
+  if (opt.sel != null) pick(opt.sel);
+  return {pick};
+}
+
+// bảng vùng dưới biểu đồ: chạm đầu → cuối và chứng minh → cuối (bước giá, dương = đúng hướng vùng)
+function fpxTable(host, zones, cols, endName) {
+  if (!zones.length) { host.innerHTML = '<p class="note">Không có vùng cá mập nào trong khung này.</p>'; return; }
+  const st = v => v == null ? '<span class="note">–</span>' : `<b class="${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v > 0 ? '+' : ''}${v}</b>`;
+  host.innerHTML = `<div class="scroll"><table class="fpx-t"><tr><th>Vùng</th><th>Lần chạm</th><th>Chứng minh</th><th>Kết cục</th><th>Chạm đầu → ${endName}</th><th>Chứng minh → ${endName}</th></tr>` +
+    zones.map(z => `<tr><td><span style="color:${z.side === 'up' ? 'var(--zupl)' : 'var(--zdnl)'}">${esc(z.lbl)}</span> ${esc(z.name)} ${px(z.lo)}${z.hi !== z.lo ? '–' + px(z.hi) : ''}</td>` +
+      `<td>${z.touches.length}</td><td>${z.proofs.length ? '<b class="gold">✓ ' + z.proofs.map(p => cols[p.i].t).join(', ') + '</b>' : '<span class="note">chưa</span>'}</td>` +
+      `<td>${z.broke != null ? `<b class="neg">✕ ${cols[z.broke].t === 'ATC' ? 'phá ở ATC ' + px(cols[z.broke].c) : 'phá ' + cols[z.broke].t}</b>` : '<span class="pos">còn giữ</span>'}</td>` +
+      `<td>${st(z.fromTouch)}</td><td>${st(z.fromProof)}</td></tr>`).join('') + '</table></div>';
+}
+
+// Trong phiên: nến của khung đang xem + vùng cá mập của khối FE
+let FPXD = null;
+function drawDayFpx() {
+  const ex = D.ex || 'HOSE';
+  const cols = V.bars.map(b => ({...b, tip: `${b.t} · ${b.auction ? 'khớp ' + fmt(b.vol) : 'delta ' + sgn(b.d) + ' · tổng ' + fmt(b.vol)}`}));
+  const Z = FE.zones().map(z => fpxProve({...z, ex, lbl: `${SIG[z.kind].s} ${z.t} CM ${Math.round(z.share)}%`,
+    tip: `${z.name} ${px(z.lo)}${z.hi !== z.lo ? '–' + px(z.hi) : ''} · cá mập ${Math.round(z.share)} % phía chủ động`}, cols));
+  FPXD = fpx($('d-fpx'), cols, Z, {id: 'd', ex, aria: 'Footprint cả phiên', sel, onPick: i => select(i), redraw: drawDayFpx});
+  fpxTable($('d-fpx-t'), Z, cols, D.partial ? 'giá cuối' : 'ATC');
+}
+
+// Nhiều phiên: mỗi cột một phiên; vùng = mức cá mập mua/bán ròng lớn nhất của phiên nếu ≥ 20 % KL cá mập phiên đó
+const MZ_SHARE = 20, MZ_MAX = 6;
+function drawDaysFpx(Ds, ex) {
+  const cols = Ds.map(d => {
+    const ps = d.lv.map(r => r[0]), vol = d.buy + d.sell + d.x;
+    return {t: d.live ? 'sáng·' + (LIVE ? LIVE.upto : '') : dd(d.d), live: !!d.live, o: d.o == null ? null : d.o, c: d.close,
+      h: Math.max(...ps, d.close), l: Math.min(...ps, d.close), lv: d.lv, d: d.delta, vol,
+      tip: `${dd(d.d)} · delta ${sgn(d.delta)} · tổng ${fmt(vol)}` + (d.blv_ok ? ` · cá mập ròng ${sgn(d.big)}` : '')};
+  });
+  let Z = [];
+  Ds.forEach((d, k) => {
+    if (!d.blv_ok || !d.blv.length || !(d.bb + d.bs)) return;
+    const [p, se, bu] = d.blv.reduce((a, r) => Math.abs(r[2] - r[1]) > Math.abs(a[2] - a[1]) ? r : a);
+    const net = bu - se, share = Math.abs(net) / (d.bb + d.bs) * 100;
+    if (share < MZ_SHARE) return;
+    Z.push({side: net > 0 ? 'up' : 'down', lo: p, hi: p, k, ex, net: Math.abs(net),
+      name: net > 0 ? 'Cá mập mua ròng' : 'Cá mập bán ròng', lbl: `${net > 0 ? '▲' : '▼'} ${dd(d.d)} CM ${Math.round(share)}%`,
+      tip: `${dd(d.d)}: cá mập ${net > 0 ? 'mua' : 'bán'} ròng ${fmt(Math.abs(net))} cp ở ${px(p)} = ${Math.round(share)} % KL cá mập phiên`});
+  });
+  Z = Z.sort((a, b) => b.net - a.net).slice(0, MZ_MAX).sort((a, b) => a.k - b.k).map(z => fpxProve(z, cols));
+  fpx($('m-fpx'), cols, Z, {id: 'm', ex, aria: 'Footprint nhiều phiên', redraw: () => drawDaysFpx(Ds, ex)});
+  fpxTable($('m-fpx-t'), Z, cols, 'phiên cuối');
+}
 
 // ---------------------------------------------------------------- ③ Nhiều phiên
 async function renderDays() {
@@ -894,7 +1097,7 @@ async function renderDays() {
   $('m-sym').onchange = () => go('days', $('m-sym').value);
   const host = $('m-chart');
   host.innerHTML = '';
-  $('m-whale').innerHTML = '';
+  $('m-whale').innerHTML = ''; $('m-fpx').innerHTML = ''; $('m-fpx-t').innerHTML = '';
   let data;
   try { data = await getJSON(`daily/${S.sym}.json`); } catch (e) { host.innerHTML = '<p class="empty">Không tải được dữ liệu mã này.</p>'; return; }
   // phiên sáng dở dang (lượt 12:05) = cột cuối, CVD đã nối tiếp các phiên đủ ở job
@@ -905,6 +1108,7 @@ async function renderDays() {
   const Ds = all.slice(-20);
   $('m-pill').textContent = `${Ds.length} phiên gần nhất · ${data.ex}` + (all.length > data.days.length ? ` · gồm phiên sáng tới ${LIVE.upto}` : '');
   if (!Ds.length) { host.innerHTML = '<p class="empty">Chưa có phiên nào.</p>'; $('m-table').innerHTML = ''; return; }
+  drawDaysFpx(Ds, data.ex);
   const W2 = Math.max(300, Math.min(1080, host.clientWidth || 720)), L2 = 40, R2 = 6, H1 = 250, HDl = 60, HCv = 60, G = 18;
   const y10 = 10, yd0 = y10 + H1 + G + 12, yc0 = yd0 + HDl + G + 12, H2 = yc0 + HCv + 10;
   let lo = Infinity, hi = -Infinity, mx = 1;

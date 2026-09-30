@@ -7,7 +7,7 @@
   --line:rgba(212,175,106,.22); --line2:rgba(212,175,106,.45); --grid:rgba(169,180,200,.10);
   --buy:#3DBE7A; --sell:#E5575C; --buy-soft:rgba(61,190,122,.24); --sell-soft:rgba(229,87,92,.26);
   --x:#7C879A; --warn:#E0A84A; --sel:rgba(212,175,106,.14);
-  --vwap:#B99BFF; --vwap-band:rgba(185,155,255,.13);
+  --vwap:#B99BFF; --zup:rgba(45,200,190,.20); --zupl:#2DC8BE; --zdn:rgba(236,120,170,.18); --zdnl:#EC78AA; --vwap-band:rgba(185,155,255,.13);
   --nav-h:64px;
 }
 *{box-sizing:border-box}
@@ -244,3 +244,16 @@ ol.plain li{margin:6px 0}
 .fe .cols>*,.fe .grid2>*{min-width:0}
 /* app đặt .grid2>div{display:contents} trên điện thoại cho bảng ①② — ở .fe phải giữ khối để khung cuộn thang giá còn tác dụng */
 @media (max-width:860px){.fe .grid2,.fe .cols{grid-template-columns:minmax(0,1fr)}.fe .grid2>div:not(.card){display:block}}
+
+/* Footprint cả phiên / nhiều phiên (★, 30/09/2026): trục giá cố định, cột cuộn ngang, svg giữ kích thước thật */
+.fpx .fpx-bar{margin:2px 0 8px}
+.fpx-wrap{display:flex;min-width:0}
+.fpx-axis{flex:0 0 46px}
+.fpx-scroll{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.fpx svg{width:auto;max-width:none;height:auto}
+.fpx-axis svg{width:46px}
+.fpx svg text{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
+.fpx-t{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:8px}
+.fpx-t th,.fpx-t td{padding:4px 6px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+.fpx-t th{color:var(--mute);font-weight:500}
+.fpx-t td:first-child,.fpx-t th:first-child{text-align:left}

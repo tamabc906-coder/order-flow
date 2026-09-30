@@ -68,7 +68,9 @@ def days(recs: list[dict], closes: dict[str, float], n_out: int = 40) -> list[di
         w = [(p, s + bu if buy + sell else s + bu + x) for p, s, bu, x in lv]
         vwv = sum(n for _, n in w)
         vw = sum(p * n for p, n in w) / vwv if vwv else None
-        out.append({"d": rec["date"], "close": round(rec["close"] * f, 2), "raw": rec["close"], "f": round(f, 4),
+        # o = giá mở cửa (nến đầu = ATO) cho biểu đồ footprint cả phiên; bản ghi cũ chỉ có levels → None
+        o = round(rec["bars"][0]["o"] * f, 2) if rec.get("bars") else None
+        out.append({"d": rec["date"], "o": o, "close": round(rec["close"] * f, 2), "raw": rec["close"], "f": round(f, 4),
                     "buy": buy, "sell": sell, "x": sm["x"], "delta": buy - sell, "cvd": cvd,
                     "share": None if share is None else round(share * 100, 1), "rel": rel,
                     "big": sm["bb"] - sm["bs"], "gap": rec.get("gap", 0), "intraday": "bars" in rec,

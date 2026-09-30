@@ -173,6 +173,16 @@ def test_days_whale_footprint_from_zone_and_ticks():
     assert o["blv_ok"] is False and o["blv"] == []
 
 
+def test_days_open_price_for_footprint_chart():
+    # 30/09/2026: giá mở = nến đầu (có nến) nhân hệ số điều chỉnh; bản ghi zone chỉ có levels → None
+    zone = {"date": "2026-09-24", "src": "zone", "close": 10.0, "total": 400, "levels": [[10.0, 100, 300, 0, 0, 0]]}
+    tick = session_record([tk("10:00:00", 25.0, 300, "PS", 300, "2026-09-25"), tk("10:05:00", 25.5, 100, "PS", 400, "2026-09-25")])
+    tick.update(date="2026-09-25")
+    d = daily.days([zone, tick], {"2026-09-25": 12.5})
+    assert d[0]["o"] is None
+    assert d[1]["o"] == pytest.approx(tick["bars"][0]["o"] * 12.5 / tick["close"], abs=0.006) and d[1]["f"] != 1
+
+
 # ---------------------------------------------------------------- lượt 12:05: phiên dở dang
 @pytest.fixture
 def job_dirs(tmp_path, monkeypatch):
