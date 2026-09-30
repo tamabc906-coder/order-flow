@@ -46,7 +46,7 @@
     </div>
     <div class="card fpx" id="fpxcard">
       <h3><span class="num">★</span>Footprint cả phiên · vùng cá mập</h3>
-      <p class="hint">Mỗi cột là một nến của khung đang chọn: ô KL theo mức giá (đỏ bán chủ động trội, xanh mua trội, ô vàng chanh ◀ POC, vạch cam VAH/VAL,
+      <p class="hint">Mỗi cột là một nến của khung đang chọn: ô KL theo mức giá (đỏ bán chủ động trội, xanh mua trội, ô trắng POC, vạch cam VAH/VAL,
         viền vàng imbalance, ô xám = khớp định kỳ ATO/ATC), nến mảnh bên phải, ô Delta/Total dưới đáy. Dải ngang là vùng cá mập; ô viền sáng = nến chạm lại vùng,
         <b class="gold">✓</b> = giá chứng minh vùng, <b class="neg">✕</b> = vùng bị phá. Bấm một cột để chọn nến. <a href="#guide" class="gold">Cách đọc</a></p>
       <div id="d-fpx"></div>
@@ -348,7 +348,7 @@
       <dl class="defs">
         <dt>Cột ô</dt><dd>Mỗi ô là một bước giá, số là tổng KL khớp ở mức đó. <span>Nút KL / bán×mua / delta đổi số trong ô.</span></dd>
         <dt style="color:var(--sell)">Ô đỏ / <span style="color:var(--buy)">xanh</span></dt><dd>Bán chủ động trội / mua chủ động trội; ô xám = hai bên gần bằng nhau. Ô càng đậm KL càng lớn so với ô lớn nhất của cột.</dd>
-        <dt style="color:#FFE14D">Ô vàng chanh ◀</dt><dd>POC: mức KL khớp liên tục lớn nhất của cột (không tính ATO/ATC).</dd>
+        <dt>Ô trắng</dt><dd>POC: mức KL khớp liên tục lớn nhất của cột (không tính ATO/ATC).</dd>
         <dt style="color:#FF9F1C">VAH / VAL</dt><dd>Hai vạch cam dày bao vùng giá trị: các mức giá quanh POC gom đủ 70 % KL khớp liên tục của cột. <span>Giá quay lại trong vùng = được thị trường chấp nhận; bật ra ngoài vùng = bị từ chối. Nút VAH·VAL bật/tắt vạch.</span></dd>
         <dt style="color:var(--x)">Ô xám viền vàng</dt><dd>ATC: KL khớp định kỳ đóng cửa ở giá đóng cửa. <span>Không có bên mua/bán chủ động nên không có delta. Ô xám viền xám là ATO (mở cửa). Ở Nhiều phiên không có cột này.</span></dd>
         <dt class="gold">Ô viền vàng</dt><dd>Imbalance: một bên lấn bên kia theo đường chéo (chỉ có ở Trong phiên).</dd>
@@ -385,7 +385,7 @@
   <a href="#guide" data-tab="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Hướng dẫn</a>
 </nav>
 
-<script src="app.js?v=26"></script>
+<script src="app.js?v=27"></script>
 <script>
 if ('serviceWorker' in navigator) {
   // Bản mới tiếp quản (skipWaiting + claim) → tải lại một lần để thấy ngay, không phải mở app hai lần
