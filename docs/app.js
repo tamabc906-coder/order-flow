@@ -1066,7 +1066,9 @@ function fpx(host, cols, zones, opt) {
       el('rect', {x: X, y: y + .5, width: CW, height: RH - 1, fill, 'fill-opacity': b.auction ? .55 : .12 + .7 * Math.pow(v / mx, .7), rx: 2}, g);
       if (poc) el('circle', {cx: X + CW - 5, cy: y + RH / 2, r: 3.2, fill: '#4DB8FF', stroke: '#0B1628', 'stroke-width': 1}, g);
       if (b.imbR.has(r)) el('rect', {x: X + .75, y: y + 1.25, width: CW - 1.5, height: RH - 2.5, fill: 'none', stroke: 'var(--gold2)', 'stroke-width': 1.5, rx: 2}, g);
-      const txt = b.auction ? kf(xx) : FPX.mode === 'bs' ? `${kf(se)}×${kf(bu)}` : FPX.mode === 'd' ? kfs(bu - se) : kf(v);
+      // Nhiều phiên: mức chỉ có khớp định kỳ (giá ATO/ATC ngoài biên khớp liên tục) không có bên chủ động → luôn hiện KL,
+      // kẻo chế độ delta in "0", bán×mua in "0×0" (TCB 01/10: ATC 6,25M ở 33,00)
+      const txt = b.auction || (!se && !bu && xx) ? kf(xx) : FPX.mode === 'bs' ? `${kf(se)}×${kf(bu)}` : FPX.mode === 'd' ? kfs(bu - se) : kf(v);
       el('text', {x: X + CW / 2, y: y + RH / 2 + FS / 2 - 1, 'text-anchor': 'middle',
         style: `font-size:${FS}px;fill:var(--ink)`}, g, txt);
     }
