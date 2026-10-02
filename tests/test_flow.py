@@ -183,6 +183,17 @@ def test_days_open_price_for_footprint_chart():
     assert d[1]["o"] == pytest.approx(tick["bars"][0]["o"] * 12.5 / tick["close"], abs=0.006) and d[1]["f"] != 1
 
 
+def test_days_v20_averages_previous_20_dnse_sessions():
+    # 02/10/2026: TB20 = KL 20 phiên DNSE TRƯỚC phiên đó, không gồm chính nó; < 10 phiên trước → None
+    dates = [f"2026-08-{i:02d}" for i in range(1, 26)]
+    vols = {d: (k + 1) * 1000 for k, d in enumerate(dates)}
+    rec = lambda d: {"date": d, "close": 10.0, "gap": 0, "levels": [[10.0, 60, 40, 0, 0, 0]]}
+    out = daily.days([rec(dates[5]), rec(dates[24])], {}, vols=vols)
+    assert out[0]["v20"] is None                                   # chỉ 5 phiên trước
+    assert out[1]["v20"] == sum(range(5, 25)) * 1000 // 20         # phiên 5..24 (KL 5000..24000)
+    assert daily.days([rec(dates[24])], {})[0]["v20"] is None      # không có nến DNSE
+
+
 # ---------------------------------------------------------------- lượt 12:05: phiên dở dang
 @pytest.fixture
 def job_dirs(tmp_path, monkeypatch):

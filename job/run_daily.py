@@ -169,7 +169,8 @@ def list_row(it: dict, dl: list[dict], doc: dict | None) -> dict:
     return row
 
 
-def build_live(items: list[dict], closes: dict, partial: dict | None, day: str | None) -> int:
+def build_live(items: list[dict], closes: dict, partial: dict | None, day: str | None,
+               vols: dict | None = None) -> int:
     """Bản xem sớm phiên hôm nay dở dang. partial=None (--rebuild): giữ bản cũ nếu phiên đủ chưa vào kho.
     Có lượt gom thật mà không có phiên dở dang (16:00, 08:15…) → gỡ bản sáng."""
     if partial is None:
@@ -186,7 +187,7 @@ def build_live(items: list[dict], closes: dict, partial: dict | None, day: str |
         recs, cl = records(sym), closes.get(sym, {})
         doc = intraday_doc(sym, ex, rec, recs[-1] if recs else None, cl, full=False)
         # share/rel so với TB 20 phiên ĐỦ trước đó — share là tỷ lệ nên phiên sáng so được với phiên đủ
-        dl = daily.days(recs + [rec], cl, DAILY_OUT)
+        dl = daily.days(recs + [rec], cl, DAILY_OUT, vols=(vols or {}).get(sym))
         # dayrow = cột phiên sáng cho tab Nhiều phiên, cùng dạng daily/<MÃ>.json (CVD nối tiếp các phiên đủ)
         doc.update(partial=True, upto=rec["upto"], dayrow=dl[-1])
         dump(LIVE_DIR / f"{sym}.json", doc)
@@ -200,9 +201,12 @@ def build_live(items: list[dict], closes: dict, partial: dict | None, day: str |
 
 def build(items: list[dict], wl_source: str, run: dict | None) -> int:
     closes: dict[str, dict] = {}
+    vols: dict[str, dict] = {}     # KL ngày DNSE → "TB20" của thẻ ★ Nhiều phiên
     with dnse.DnseClient() as c:
         for it in items:
-            closes[it["symbol"]] = c.closes(it["symbol"], DNSE_DAYS)
+            bars = c.bars(it["symbol"], DNSE_DAYS)
+            closes[it["symbol"]] = {d: cv[0] for d, cv in bars.items()}
+            vols[it["symbol"]] = {d: cv[1] for d, cv in bars.items()}
 
     all_days = sorted({p.stem for p in STORE.glob("*/*.json")})
     keep = set(all_days[-KEEP_INTRADAY:])
@@ -215,7 +219,7 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
         if not recs:
             continue
         cl = closes.get(sym, {})
-        dl = daily.days(recs, cl, DAILY_OUT)
+        dl = daily.days(recs, cl, DAILY_OUT, vols=vols.get(sym))
         dump(SITE_DATA / "daily" / f"{sym}.json", {"sym": sym, "ex": ex, "days": dl})
         last_doc = None
         for k, rec in enumerate(recs):
@@ -243,7 +247,7 @@ def build(items: list[dict], wl_source: str, run: dict | None) -> int:
 
     now = datetime.now(TZ).isoformat(timespec="seconds")
     day = max((r["day"] for r in rows), default=None)
-    n_live = build_live(items, closes, run["partial"] if run else None, day)
+    n_live = build_live(items, closes, run["partial"] if run else None, day, vols)
     dump(SITE_DATA / "latest.json", {"generated": now, "day": day, "dates": sorted(dates, reverse=True),
                                      "watchlist": wl_source, "read_stats": stats, "items": rows})
     state = {"run_at": now, "day": day, "symbols": len(items), "built": len(rows), "watchlist": wl_source,

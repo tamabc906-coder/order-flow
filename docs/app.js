@@ -1017,12 +1017,13 @@ function fpx(host, cols, zones, opt) {
     return {...b, rl, poc, va, imbR: new Set((b.imb || []).map(([p]) => row(p)))};
   });
   const RH = rows > 40 ? 13 : 17, FS = RH > 14 ? 10 : 9;
-  const CW = FPX.mode === 'bs' ? 80 : 62, KW = 14, COL = CW + KW + 10, BH = 30, BT = 11;
-  const T = 8, BOT = BH + BT + 44, H = T + rows * RH + BOT, W = n * COL + 12;
+  const CW = FPX.mode === 'bs' ? 80 : 62, KW = 14, COL = CW + KW + 10, BH = 30, BT = 11, BV = 12;
+  // BV: dòng "TB20" (KL TB 20 phiên trước, chỉ cột phiên của Nhiều phiên có v20)
+  const hasV = cols.some(b => b.v20), T = 8, BOT = BH + BT + (hasV ? BV : 0) + 44, H = T + rows * RH + BOT, W = n * COL + 12;
   const yRow = r => T + r * RH, yR = p => yRow(row(p)), yC = p => yR(p) + RH / 2, x0 = i => 6 + i * COL;
   const touchSet = new Set(zones.flatMap(z => z.touches));
   const boxY = b => yR(b.l) + RH + 4;
-  const boxH = i => BH + (touchSet.has(i) && !cols[i].auction ? BT : 0);
+  const boxH = i => BH + (cols[i].v20 ? BV : 0) + (touchSet.has(i) && !cols[i].auction ? BT : 0);
 
   const sa = el('svg', {width: 46, height: H, viewBox: `0 0 46 ${H}`}, axH);
   const every = Math.max(1, Math.ceil(14 / RH));
@@ -1104,8 +1105,12 @@ function fpx(host, cols, zones, opt) {
       tx(X + 4, by + 25, b.t === 'ATC' ? 'đóng cửa' : 'mở cửa', 'fill:var(--dim)');
     } else {
       tx(X + 4, by + 12, 'Delta', 'fill:var(--mute)'); tx(X + bw - 4, by + 12, kfs(b.d), `fill:${b.d >= 0 ? 'var(--buy)' : 'var(--sell)'};font-weight:600`, 1);
-      tx(X + 4, by + 25, 'Total', 'fill:var(--mute)'); tx(X + bw - 4, by + 25, kf(b.vol), 'fill:var(--ink)', 1);
-      if (touched) tx(X + 4, by + 37, 'chạm vùng CM', `fill:${b.d >= 0 ? 'var(--buy)' : 'var(--sell)'};font-size:9px`);
+      // Total so TB20: ≥ 1,5× tô vàng đậm (KL đột biến), ≤ 0,5× mờ (cạn KL); cột sáng·live mới nửa phiên → không tô
+      const vr = b.v20 && !b.live ? b.vol / b.v20 : null;
+      tx(X + 4, by + 25, 'Total', 'fill:var(--mute)');
+      tx(X + bw - 4, by + 25, kf(b.vol), vr >= 1.5 ? 'fill:var(--gold);font-weight:700' : vr != null && vr <= .5 ? 'fill:var(--dim)' : 'fill:var(--ink)', 1);
+      if (b.v20) { tx(X + 4, by + 37, 'TB20', 'fill:var(--mute)'); tx(X + bw - 4, by + 37, kf(b.v20), 'fill:var(--ink)', 1); }
+      if (touched) tx(X + 4, by + 37 + (b.v20 ? BV : 0), 'chạm vùng CM', `fill:${b.d >= 0 ? 'var(--buy)' : 'var(--sell)'};font-size:9px`);
     }
     el('text', {x: X + CW / 2, y: H - 8, 'text-anchor': 'middle', style: b.t === 'ATC' || b.live ? 'fill:var(--gold2)' : ''}, g,
       b.t === 'ATC' ? 'ATC ' + px(b.c) : b.t);
@@ -1162,8 +1167,9 @@ function drawDaysFpx(Ds, ex) {
   const cols = Ds.map(d => {
     const ps = d.lv.map(r => r[0]), vol = d.buy + d.sell + d.x;
     return {t: d.live ? 'sáng·' + (LIVE ? LIVE.upto : '') : dd(d.d), live: !!d.live, o: d.o == null ? null : d.o, c: d.close,
-      h: Math.max(...ps, d.close), l: Math.min(...ps, d.close), lv: d.lv, d: d.delta, vol,
-      tip: `${dd(d.d)} · delta ${sgn(d.delta)} · tổng ${fmt(vol)}` + (d.blv_ok ? ` · cá mập ròng ${sgn(d.big)}` : '')};
+      h: Math.max(...ps, d.close), l: Math.min(...ps, d.close), lv: d.lv, d: d.delta, vol, v20: d.v20 || null,
+      tip: `${dd(d.d)} · delta ${sgn(d.delta)} · tổng ${fmt(vol)}` + (d.v20 ? ` · TB20 ${fmt(d.v20)} (${(vol / d.v20).toFixed(2).replace('.', ',')}×)` : '') +
+        (d.blv_ok ? ` · cá mập ròng ${sgn(d.big)}` : '')};
   });
   let Z = [];
   Ds.forEach((d, k) => {

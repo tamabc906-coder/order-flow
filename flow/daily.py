@@ -9,6 +9,8 @@ Tick là giá THÔ; nhiều phiên phải quy về thang giá điều chỉnh b�
 from __future__ import annotations
 
 REL_N = 20              # "so TB": tỷ lệ mua chủ động so với trung bình tối đa 20 phiên trước
+V20_N = 20              # "TB20": KL trung bình 20 phiên DNSE TRƯỚC phiên đó (không gồm chính nó)
+V20_MIN = 10            # ít hơn 10 phiên trước thì không tính
 FACTOR_NOISE = 0.005    # lệch < 0,5 % coi như không có sự kiện điều chỉnh
 
 
@@ -49,8 +51,16 @@ def factor(raw_close: float, adj_close: float | None) -> float:
     return 1.0 if abs(f - 1) < FACTOR_NOISE else f
 
 
-def days(recs: list[dict], closes: dict[str, float], n_out: int = 40) -> list[dict]:
-    """Các phiên (cũ → mới) đã quy giá điều chỉnh; trả n_out phiên cuối. CVD cộng dồn từ phiên đầu kho."""
+def v20(vols: dict[str, int] | None, day: str) -> int | None:
+    """TB KL V20_N phiên DNSE có ngày < day; None nếu < V20_MIN phiên (hoặc không có nến DNSE)."""
+    prev = [v for d, v in sorted((vols or {}).items()) if d < day and v][-V20_N:]
+    return round(sum(prev) / len(prev)) if len(prev) >= V20_MIN else None
+
+
+def days(recs: list[dict], closes: dict[str, float], n_out: int = 40,
+         vols: dict[str, int] | None = None) -> list[dict]:
+    """Các phiên (cũ → mới) đã quy giá điều chỉnh; trả n_out phiên cuối. CVD cộng dồn từ phiên đầu kho.
+    vols = {ngày: KL} nến ngày DNSE → trường v20."""
     out, cvd, shares = [], 0, []
     for rec in recs:
         sm = summary(rec)
@@ -76,5 +86,6 @@ def days(recs: list[dict], closes: dict[str, float], n_out: int = 40) -> list[di
                     "big": sm["bb"] - sm["bs"], "gap": rec.get("gap", 0), "intraday": "bars" in rec,
                     "vw": None if vw is None else round(vw, 3), "vwv": vwv,
                     "cvw": round((rec["close"] * f / vw - 1) * 100, 2) if vw else None, "lv": lv,
-                    "bb": sm["bb"], "bs": sm["bs"], "blv": blv or [], "blv_ok": blv is not None})
+                    "bb": sm["bb"], "bs": sm["bs"], "blv": blv or [], "blv_ok": blv is not None,
+                    "v20": v20(vols, rec["date"])})
     return out[-n_out:]

@@ -34,6 +34,10 @@ class DnseClient:
 
     def closes(self, symbol: str, days: int) -> dict[str, float]:
         """{ngày ISO: giá đóng cửa điều chỉnh} cho `days` ngày lịch gần nhất."""
+        return {d: c for d, (c, _) in self.bars(symbol, days).items()}
+
+    def bars(self, symbol: str, days: int) -> dict[str, tuple[float, int]]:
+        """{ngày ISO: (giá đóng cửa điều chỉnh, KL khớp)} — KL DNSE = tổng tick (TCB 18/09–02/10 lệch 0)."""
         global last_error
         wait = THROTTLE_SECONDS - (time.monotonic() - self._last_call)
         if wait > 0:
@@ -47,8 +51,9 @@ class DnseClient:
             self._last_call = time.monotonic()
             r.raise_for_status()
             p = r.json()
-            out = {datetime.fromtimestamp(t, TZ).date().isoformat(): float(c)
-                   for t, c in zip(p.get("t") or [], p.get("c") or [])}
+            vs = p.get("v") or []
+            out = {datetime.fromtimestamp(t, TZ).date().isoformat(): (float(c), int(vs[k]) if k < len(vs) and vs[k] else 0)
+                   for k, (t, c) in enumerate(zip(p.get("t") or [], p.get("c") or []))}
         except Exception as exc:  # noqa: BLE001 — một mã hỏng không được làm chết cả vòng
             self._last_call = time.monotonic()
             last_error = f"{symbol}: {exc}"
