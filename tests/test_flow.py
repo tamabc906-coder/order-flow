@@ -136,7 +136,8 @@ def test_fpt_vwap_same_across_timeframes():
 def test_big_order_value_and_daily_vwap():
     rec = json.loads(FPT.read_text(encoding="utf-8"))
     bb = sum(b["bb"] for b in rec["bars"]); bbv = sum(b["bbv"] for b in rec["bars"])
-    assert bbv / bb == pytest.approx(65.13, abs=0.01)   # giá vốn lệnh lớn mua CĐ, khớp order-flow-lab
+    # giá vốn lệnh lớn mua CĐ: 65,13 khớp order-flow-lab (gộp theo giá); 65,15 từ 05/10/2026 khi tính cả lệnh quét
+    assert bbv / bb == pytest.approx(65.15, abs=0.01)
     d = daily.days([rec], {})[-1]
     assert d["vw"] == pytest.approx(65.046, abs=1e-3) and d["vwv"] == 1_001_700 + 2_336_200
 
@@ -277,3 +278,18 @@ def test_morning_reading_quiet_session_no_crash():
     rd = reading.read_morning(mb, "HOSE")
     assert rd["title"] and rd["levels"] and rd["watch"].startswith("Canh:")
     assert reading.read_outcome(rd, mb, "HOSE") is None      # chưa có buổi chiều
+
+
+# ---------------------------------------------------------------- lệnh quét nhiều mức giá (05/10/2026)
+def test_sweep_across_prices_is_one_big_order():
+    # PLX 01/10/2026 09:48:44: mua 20.000 cp = 399 tr ở 37,60 + 354 tr ở 37,65 → lớn ở cả hai mức
+    t = [tk("09:48:44", 37.6, 10600, "PS", 10600), tk("09:48:44", 37.65, 9400, "PS", 20000),
+         tk("09:48:44", 37.6, 9000, "PB", 29000)]          # bán chủ động cùng giây: lệnh khác, 338 tr → nhỏ
+    bar = session_record(t)["bars"][0]
+    assert bar["bb"] == 20000 and bar["bs"] == 0
+    assert bar["blv"] == [[37.65, 0, 9400], [37.6, 0, 10600]]
+
+
+def test_same_side_different_seconds_not_merged():
+    t = [tk("10:00:00", 37.6, 10000, "PS", 10000), tk("10:00:01", 37.65, 9000, "PS", 19000)]
+    assert session_record(t)["bars"][0]["bb"] == 0

@@ -4,7 +4,8 @@
   PS = MUA. Đã đối chiếu 1.497 lệnh với Vietcap: đọc ngược 100 %.
 - ATO/ATC không có bên chủ động → cột x, không cộng vào delta.
 - Một lệnh chủ động bị tách nhiều tick (mỗi lệnh chờ bị khớp một dòng) → gộp tick liên tiếp cùng giây/giá/hướng
-  thành một lệnh trước khi xét "lệnh lớn" (≥ 500 tr đ).
+  thành một lệnh, rồi gộp tiếp các lệnh liên tiếp cùng giây/hướng (một lệnh quét ăn nhiều mức giá) trước khi xét
+  "lệnh lớn" (≥ 500 tr đ) — xem sweeps(); cùng quy tắc price-path/zone/collect.py từ 04/10/2026.
 - Mã không có trường side (DGC: 0/667 tick) → mọi KL rơi vào x, cờ no_side.
 """
 from __future__ import annotations
@@ -48,6 +49,22 @@ def orders(ticks: list[dict]) -> list[dict]:
     return out
 
 
+def sweeps(ords: list[dict]) -> list[list[dict]]:
+    """Nhóm lệnh LIÊN TIẾP cùng giây + cùng hướng chủ động thành một lệnh quét (có thể nhiều mức giá).
+
+    PLX 01/10/2026 09:48:44 mua 20.000 cp = 399 tr ở 37,60 + 354 tr ở 37,65: gộp theo giá thì cả hai mảnh < 500 tr và
+    lớp cá mập bỏ sót (soát 04/10/2026, 39 mã × 4 phiên: ≈ 1,2 % giá trị cá mập). ATO/ATC giữ riêng từng dòng.
+    """
+    out: list[list[dict]] = []
+    for o in ords:
+        last = out[-1][-1] if out else None
+        if last and o["side"] in SIDE_INDEX and last["side"] == o["side"] and last["time"] == o["time"]:
+            out[-1].append(o)
+        else:
+            out.append([o])
+    return out
+
+
 def _minute(t: str) -> int:
     h, m, *_ = t.split(":")
     return int(h) * 60 + int(m)
@@ -60,34 +77,44 @@ def session_bars(ticks: list[dict]) -> list[dict]:
     bbv/bsv = Σ giá × KL của lệnh lớn mua/bán chủ động (giá thô) → giá vốn bình quân cá mập = bbv / bb.
     Bản ghi trước 26/09/2026 không có bbv/bsv; trước 27/09/2026 không có blv (footprint cá mập)."""
     bars: dict[str, dict] = {}
-    for o in orders(ticks):
-        side = o["side"]
-        if side in ("ATO", "ATC"):
-            key = label = side
-        else:
-            m = _minute(o["time"]) // BAR_MIN * BAR_MIN
-            key, label = f"{m:04d}", f"{m // 60:02d}:{m % 60:02d}"
-        b = bars.get(key)
-        p = o["price"]
-        if b is None:
-            b = bars[key] = {"t": label, "auction": side in ("ATO", "ATC"), "o": p, "h": p, "l": p, "c": p,
-                             "buy": 0, "sell": 0, "x": 0, "bb": 0, "bs": 0, "bbv": 0.0, "bsv": 0.0, "lv": {}, "blv": {}}
-        b["h"], b["l"], b["c"] = max(b["h"], p), min(b["l"], p), p
-        row = b["lv"].setdefault(pkey(p), [0, 0, 0])  # bán, mua, x
-        idx = SIDE_INDEX.get(side, OTHER)
-        big = idx != OTHER and p * o["vol"] >= BIG_VALUE
-        if idx == BUY:
-            b["buy"] += o["vol"]; row[1] += o["vol"]
-            if big:
-                b["bb"] += o["vol"]; b["bbv"] += p * o["vol"]
-                b["blv"].setdefault(pkey(p), [0, 0])[1] += o["vol"]
-        elif idx == SELL:
-            b["sell"] += o["vol"]; row[0] += o["vol"]
-            if big:
-                b["bs"] += o["vol"]; b["bsv"] += p * o["vol"]
-                b["blv"].setdefault(pkey(p), [0, 0])[0] += o["vol"]
-        else:
-            b["x"] += o["vol"]; row[2] += o["vol"]
+    for sw in sweeps(orders(ticks)):
+        big_sw = sw[0]["side"] in SIDE_INDEX and sum(o["price"] * o["vol"] for o in sw) >= BIG_VALUE
+        for o in sw:
+            _add(bars, o, big_sw)
+    return _finish(bars)
+
+
+def _add(bars: dict, o: dict, big: bool) -> None:
+    """Cộng một lệnh (một mức giá) vào nến của nó; big = lệnh quét chứa nó đạt ngưỡng lệnh lớn."""
+    side = o["side"]
+    if side in ("ATO", "ATC"):
+        key = label = side
+    else:
+        m = _minute(o["time"]) // BAR_MIN * BAR_MIN
+        key, label = f"{m:04d}", f"{m // 60:02d}:{m % 60:02d}"
+    b = bars.get(key)
+    p = o["price"]
+    if b is None:
+        b = bars[key] = {"t": label, "auction": side in ("ATO", "ATC"), "o": p, "h": p, "l": p, "c": p,
+                         "buy": 0, "sell": 0, "x": 0, "bb": 0, "bs": 0, "bbv": 0.0, "bsv": 0.0, "lv": {}, "blv": {}}
+    b["h"], b["l"], b["c"] = max(b["h"], p), min(b["l"], p), p
+    row = b["lv"].setdefault(pkey(p), [0, 0, 0])  # bán, mua, x
+    idx = SIDE_INDEX.get(side, OTHER)
+    if idx == BUY:
+        b["buy"] += o["vol"]; row[1] += o["vol"]
+        if big:
+            b["bb"] += o["vol"]; b["bbv"] += p * o["vol"]
+            b["blv"].setdefault(pkey(p), [0, 0])[1] += o["vol"]
+    elif idx == SELL:
+        b["sell"] += o["vol"]; row[0] += o["vol"]
+        if big:
+            b["bs"] += o["vol"]; b["bsv"] += p * o["vol"]
+            b["blv"].setdefault(pkey(p), [0, 0])[0] += o["vol"]
+    else:
+        b["x"] += o["vol"]; row[2] += o["vol"]
+
+
+def _finish(bars: dict) -> list[dict]:
     keys = (["ATO"] if "ATO" in bars else []) + sorted(k for k in bars if k not in ("ATO", "ATC")) \
         + (["ATC"] if "ATC" in bars else [])
     out = []
