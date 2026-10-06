@@ -1,18 +1,13 @@
 {
- "run_at": "2026-10-06T12:20:44+07:00",
- "day": "2026-10-05",
+ "run_at": "2026-10-06T16:15:38+07:00",
+ "day": "2026-10-06",
  "symbols": 39,
  "built": 39,
  "watchlist": "kingstock",
  "dnse_missing": [],
- "gaps": {
-  "CEO": 500,
-  "VPB": 1000
- },
- "partial": 39,
- "new": [],
- "failed": {},
- "unsettled": [
+ "gaps": {},
+ "partial": 0,
+ "new": [
   "ACB",
   "AGR",
   "BID",
@@ -53,5 +48,7 @@
   "VIX",
   "VPB"
  ],
+ "failed": {},
+ "unsettled": [],
  "vndirect_last_error": ""
 }
