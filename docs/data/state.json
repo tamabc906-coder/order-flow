@@ -1,15 +1,13 @@
 {
- "run_at": "2026-10-07T12:21:30+07:00",
- "day": "2026-10-06",
+ "run_at": "2026-10-07T16:15:38+07:00",
+ "day": "2026-10-07",
  "symbols": 39,
  "built": 39,
  "watchlist": "kingstock",
  "dnse_missing": [],
  "gaps": {},
- "partial": 39,
- "new": [],
- "failed": {},
- "unsettled": [
+ "partial": 0,
+ "new": [
   "ACB",
   "AGR",
   "BID",
@@ -50,5 +48,7 @@
   "VIX",
   "VPB"
  ],
+ "failed": {},
+ "unsettled": [],
  "vndirect_last_error": ""
 }
